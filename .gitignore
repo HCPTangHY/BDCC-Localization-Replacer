@@ -1,0 +1,13 @@
+source
+output
+fetch
+fetchout
+trans
+transoutput
+*.gd
+*.json
+*.pyc
+*.godot
+*.exe
+*.import
+*.png
