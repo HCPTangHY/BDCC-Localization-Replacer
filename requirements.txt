@@ -1,0 +1,7 @@
+pip==24.1.2
+setuptools==71.1.0
+wheel==0.43.0
+ujson==5.10.0
+loguru==0.7.2
+json5==0.9.25
+
