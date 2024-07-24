@@ -7,15 +7,21 @@ from .consts import *
 from .log import logger
 
 class Replacer:
-    def __init__(self,paratranzPath,BDCCSourcePath):
-        self.paratranzPath = paratranzPath
-        self.BDCCSourcePath = BDCCSourcePath
+    def __init__(self):
+        logger.info("Replacer init")
+        self.paratranzPath = DIR_TRANS
+        self.BDCCSourcePath = DIR_SOURCE
         self.translationDict = {}
+        logger.info(f"Replacer read translate path {self.paratranzPath}")
+        logger.info(f"Replacer read BDCC path {self.BDCCSourcePath}")
+        logger.info("Replacer read hash_index.json")
         with open(ROOT.__str__()+"\\hash_index.json","r",encoding="utf-8") as fp:
             jsondata = json.loads(fp.read())
         self.hashIndex = jsondata
+        logger.info("Replacer init done")
 
     def read_translation_files(self):
+        logger.info("Replacer read translation files")
         translationDict = {}
         files = os.walk(DIR_TRANS)
         for root, dirs, file in files:
@@ -25,10 +31,13 @@ class Replacer:
                 translationDict[root.replace(ROOT.__str__()+'\\','')+'\\'+f] = jsondata
                 # logger.info(f"{root.replace(ROOT.__str__(),'')}\{f} readed")
         self.translationDict =translationDict
+        logger.info("Replacer read translation files done")
 
     def BDCC_replace(self):
+        logger.info("Replacer BDCC replace")
         if DIR_OUTPUT.exists():
             shutil.rmtree(DIR_OUTPUT)
+        logger.info("Replacer BDCC replace output dir created")
         os.makedirs(DIR_OUTPUT, exist_ok=True)
         files = os.walk(Path(self.BDCCSourcePath))
         for root, dirs, file in files:
@@ -71,7 +80,7 @@ class Replacer:
                         logger.error(f"{f},{index}")
                 with open(root.replace('source','output',1)+"\\"+f, "w", encoding="utf-8") as fp:
                     fp.write("".join(flines))
-                # logger.info(root.replace('\source','\output',1)+"\\"+f+" output filled")
+                logger.info(root.replace('\source','\output',1)+"\\"+f+" output filled")
 
 if __name__ == '__main__':
     pass
