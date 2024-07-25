@@ -1,77 +1,97 @@
 import ujson as json
-import json5
-import os,re,difflib
+import os
 import shutil
-
 from .consts import *
 from .log import logger
 
+
 class Replacer:
-    def __init__(self,paratranzPath,BDCCSourcePath):
-        self.paratranzPath = paratranzPath
-        self.BDCCSourcePath = BDCCSourcePath
+    def __init__(self):
+        logger.info("Replacer init")
+        self.paratranzPath = f"{DIR_TRANS}"
+        self.BDCCSourcePath = f"{DIR_SOURCE}"
         self.translationDict = {}
-        with open(ROOT.__str__()+"\\hash_index.json","r",encoding="utf-8") as fp:
-            jsondata = json.loads(fp.read())
-        self.hashIndex = jsondata
+        logger.info(f"Replacer read translate path {self.paratranzPath}")
+        logger.info(f"Replacer read BDCC path {self.BDCCSourcePath}")
+        logger.info("Replacer read hash_index.json")
+        with open(f"{ROOT}\\hash_index.json", "r", encoding="utf-8") as fp:
+            self.hashIndex = json.load(fp)
+        logger.info("Replacer init done")
 
     def read_translation_files(self):
-        translationDict = {}
-        files = os.walk(DIR_TRANS)
-        for root, dirs, file in files:
-            for f in file:
-                with open(f"{root}\{f}","r",encoding="utf-8") as fp:
-                    jsondata = json.loads(fp.read())
-                translationDict[root.replace(ROOT.__str__()+'\\','')+'\\'+f] = jsondata
-                # logger.info(f"{root.replace(ROOT.__str__(),'')}\{f} readed")
-        self.translationDict =translationDict
+        logger.info("Replacer read translation files")
+        translation_dict = {}
+        root_path = f"{ROOT}"
+        for root, _, files in os.walk(DIR_TRANS):
+            for file in files:
+                with open(f"{root}\\{file}", "r", encoding="utf-8") as fp:
+                    logger.info(f"Replacer read {root}\\{file}")
+                    # filepath = f"{root.replace(root_path, '')}"
+                    # logger.info(f"Replacer read {filepath}\\{file}")
+                    key = f"{root}\\{file}"
+                    translation_dict[key] = json.load(fp)
+                    # logger.info(f"translation: {translation_dict[key]}")
+        self.translationDict = translation_dict
+        logger.info("Replacer read translation files done")
 
     def BDCC_replace(self):
+        logger.info("Replacer BDCC replace")
         if DIR_OUTPUT.exists():
             shutil.rmtree(DIR_OUTPUT)
         os.makedirs(DIR_OUTPUT, exist_ok=True)
-        files = os.walk(Path(self.BDCCSourcePath))
-        for root, dirs, file in files:
+        for root, dirs, files in os.walk(self.BDCCSourcePath):
             for d in dirs:
-                if not os.path.exists(root.replace('source','output',1)+"\\"+d):
-                    os.makedirs(root.replace('source','output',1)+"\\"+d)
-            for f in file:
-                filePath = root+"\\"+f
-                if "DatapackMenu.gd" in f:continue
-                if not (f.endswith(".gd") or f.endswith(".tscn")):
-                    shutil.copyfile(filePath, filePath.replace('source','output',1))
+                os.makedirs(root.replace('source', 'output', 1) + "\\" + d, exist_ok=True)
+            for f in files:
+                file_path = f"{root}\\{f}"
+                output_path = file_path.replace('source', 'output', 1)
+                if "DatapackMenu.gd" in f or not (f.endswith(".gd") or f.endswith(".tscn")):
+                    shutil.copyfile(file_path, output_path)
                     continue
-                with open(filePath,"r",encoding="utf-8") as fp:
+                with open(file_path, "r", encoding="utf-8") as fp:
                     flines = fp.readlines()
-                if (filePath.replace('source','trans',1).replace(".gd",".json") not in self.translationDict.keys()):
-                    # logger.error(root.replace('source','trans',1)+"\\"+f.replace(".gd",".json")+" not in trans file")
-                    shutil.copyfile(root+"\\"+f, root.replace('source','output',1)+"\\"+f)
+                trans_file_path = file_path.replace('source', 'trans', 1).replace(".gd", ".json")
+                # logger.info(f"trans_file {trans_file_path} in {file_path}")
+                if trans_file_path not in self.translationDict:
+                    shutil.copyfile(file_path, output_path)
+                    # logger.info(f"trans_file {trans_file_path}")
                     continue
-                fileHashIndex = self.hashIndex[filePath.replace(ROOT.__str__(),"").replace("source\\","",1)]
-                transDict = self.translationDict[filePath.replace('source','trans',1).replace(".gd",".json")]
-                for i in range(len(transDict)):
-                    index = int(transDict[i]['key'].split("_")[-1])
-                    hash = list(fileHashIndex['Indexes'].keys())[list(fileHashIndex['Indexes'].values()).index(index)]
-                    tokenPostion = fileHashIndex["TokenPostion"][hash][0]
-                    translation = transDict[i]['translation'] if transDict[i]['translation']!= "" else transDict[i]['original']
-                    context = transDict[i]['context'] if 'context' in transDict[i] else transDict[i]['original']
+                # logger.info(f"trans_file {trans_file_path}")
+                file_hash_index = self.hashIndex[file_path.replace(self.BDCCSourcePath + "\\", "", 1)]
+                trans_dict = self.translationDict[trans_file_path]
+                for i in range(len(trans_dict)):
+                    trans_value = trans_dict[i]
+                    index = int(trans_value['key'].split("_")[-1])
+                    hash = list(file_hash_index['Indexes'].keys())[list(file_hash_index['Indexes'].values()).index(index)]
+                    tokenPostion = file_hash_index["TokenPostion"][hash][0]
+                    translation = trans_value['translation'] if trans_value['translation'] != "" else trans_value[
+                        'original']
+                    translationParse = translation.split("\n")
+                    if len(translationParse)>1:
+                        strFlag = False
+                        for i in range(len(translationParse)):
+                            if i+1==len(translation):break
+                            if translationParse[i]==translationParse[i+1]=="\"":
+                                strFlag = True
+                                break
+                        if strFlag:translation = translation.replace("\n", "\\n")
+                        else:translation=translation.replace("\n","")
+                    context = trans_value['context'] if 'context' in trans_value else trans_value['original']
                     targetLine = []
                     lineIndex = tokenPostion["StartLine"]
-                    if lineIndex>=len(flines):lineIndex-=1
+                    if lineIndex >= len(flines): lineIndex -= 1
                     if context not in flines[lineIndex]:
-                        if context in flines[min(lineIndex+1,len(flines)-1)]:lineIndex=min(lineIndex+1,len(flines)-1)
+                        if context in flines[min(lineIndex + 1, len(flines) - 1)]:
+                            lineIndex = min(lineIndex + 1, len(flines) - 1)
                         else:
-                            if context in flines[lineIndex-1]:lineIndex-=1
+                            if context in flines[lineIndex - 1]: lineIndex -= 1
                     try:
                         targetLine.append(flines[lineIndex][:tokenPostion["StartColumn"]])
-                        targetLine.append(translation.replace("\\n","\\\\n"))
+                        targetLine.append(translation)
                         targetLine.append(flines[lineIndex][tokenPostion["EndColumn"]:])
                         flines[lineIndex] = "".join(targetLine)
                     except:
                         logger.error(f"{f},{index}")
-                with open(root.replace('source','output',1)+"\\"+f, "w", encoding="utf-8") as fp:
+                with open(output_path, "w", encoding="utf-8") as fp:
                     fp.write("".join(flines))
-                # logger.info(root.replace('\source','\output',1)+"\\"+f+" output filled")
-
-if __name__ == '__main__':
-    pass
+                # logger.info(f"{output_path} output filled")
