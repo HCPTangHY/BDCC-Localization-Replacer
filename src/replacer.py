@@ -51,7 +51,8 @@ class Replacer:
                 with open(file_path, "r", encoding="utf-8") as fp:
                     flines = fp.readlines()
                 trans_file_path = file_path.replace('source', 'trans', 1).replace(".gd", ".json")
-                logger.info(f"trans_file {trans_file_path} in {file_path}")
+
+                logger.info(f"trans_file {trans_file_path} in {file_path}"
                 if trans_file_path not in self.translationDict:
                     shutil.copyfile(file_path, output_path)
                     # logger.info(f"trans_file {trans_file_path}")
@@ -66,6 +67,16 @@ class Replacer:
                     tokenPostion = file_hash_index["TokenPostion"][hash][0]
                     translation = trans_value['translation'] if trans_value['translation'] != "" else trans_value[
                         'original']
+                    translationParse = translation.split("\n")
+                    if len(translationParse)>1:
+                        strFlag = False
+                        for i in range(len(translationParse)):
+                            if i+1==len(translation):break
+                            if translationParse[i]==translationParse[i+1]=="\"":
+                                strFlag = True
+                                break
+                        if strFlag:translation = translation.replace("\n", "\\n")
+                        else:translation=translation.replace("\n","")
                     context = trans_value['context'] if 'context' in trans_value else trans_value['original']
                     targetLine = []
                     lineIndex = tokenPostion["StartLine"]
@@ -77,7 +88,7 @@ class Replacer:
                             if context in flines[lineIndex - 1]: lineIndex -= 1
                     try:
                         targetLine.append(flines[lineIndex][:tokenPostion["StartColumn"]])
-                        targetLine.append(translation.replace("\\n", "\\\\n"))
+                        targetLine.append(translation)
                         targetLine.append(flines[lineIndex][tokenPostion["EndColumn"]:])
                         flines[lineIndex] = "".join(targetLine)
                     except:
