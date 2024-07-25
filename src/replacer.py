@@ -8,36 +8,35 @@ from .log import logger
 class Replacer:
     def __init__(self):
         logger.info("Replacer init")
-        self.paratranzPath = f"{DIR_TRANS}"
-        self.BDCCSourcePath = f"{DIR_SOURCE}"
+        self.paratranzPath = DIR_TRANS
+        self.BDCCSourcePath = DIR_SOURCE
         self.translationDict = {}
         logger.info(f"Replacer read translate path {self.paratranzPath}")
         logger.info(f"Replacer read BDCC path {self.BDCCSourcePath}")
         logger.info("Replacer read hash_index.json")
-        with open(f"{ROOT}\\hash_index.json", "r", encoding="utf-8") as fp:
-            self.hashIndex = json.load(fp)
+        with open(ROOT.__str__()+"\\hash_index.json","r",encoding="utf-8") as fp:
+            jsondata = json.loads(fp.read())
+        self.hashIndex = jsondata
         logger.info("Replacer init done")
 
     def read_translation_files(self):
         logger.info("Replacer read translation files")
-        translation_dict = {}
-        root_path = f"{ROOT}"
-        for root, _, files in os.walk(DIR_TRANS):
-            for file in files:
-                with open(f"{root}\\{file}", "r", encoding="utf-8") as fp:
-                    logger.info(f"Replacer read {root}\\{file}")
-                    # filepath = f"{root.replace(root_path, '')}"
-                    # logger.info(f"Replacer read {filepath}\\{file}")
-                    key = f"{root}\\{file}"
-                    translation_dict[key] = json.load(fp)
-                    # logger.info(f"translation: {translation_dict[key]}")
-        self.translationDict = translation_dict
+        translationDict = {}
+        files = os.walk(DIR_TRANS)
+        for root, dirs, file in files:
+            for f in file:
+                with open(f"{root}\{f}","r",encoding="utf-8") as fp:
+                    jsondata = json.loads(fp.read())
+                translationDict[root.replace(ROOT.__str__()+'\\','')+'\\'+f] = jsondata
+                # logger.info(f"{root.replace(ROOT.__str__(),'')}\{f} readed")
+        self.translationDict =translationDict
         logger.info("Replacer read translation files done")
 
     def BDCC_replace(self):
         logger.info("Replacer BDCC replace")
         if DIR_OUTPUT.exists():
             shutil.rmtree(DIR_OUTPUT)
+        logger.info("Replacer BDCC replace output dir created")
         os.makedirs(DIR_OUTPUT, exist_ok=True)
         for root, dirs, files in os.walk(self.BDCCSourcePath):
             for d in dirs:
@@ -94,4 +93,7 @@ class Replacer:
                         logger.error(f"{f},{index}")
                 with open(output_path, "w", encoding="utf-8") as fp:
                     fp.write("".join(flines))
-                # logger.info(f"{output_path} output filled")
+                logger.info(root.replace('\source','\output',1)+"\\"+f+" output filled")
+
+if __name__ == '__main__':
+    pass
