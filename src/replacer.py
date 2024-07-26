@@ -126,11 +126,8 @@ class Replacer:
                         lineWrited.append(lineIndex)
                         continue
                     if lineIndex >= len(flines): lineIndex -= 1
-                    if context not in flines[lineIndex]:
-                        if context in flines[min(lineIndex + 1, len(flines) - 1)]:
-                            lineIndex = min(lineIndex + 1, len(flines) - 1)
-                        else:
-                            if context in flines[lineIndex - 1]: lineIndex -= 1
+                    if context not in flines[lineIndex] and trans_value['original'] not in flines[lineIndex]:
+                        continue
                     try:
                         if lineIndex in lineWrited:
                             targetLine = flines[lineIndex].replace(f"\"{trans_value['original']}\"",f"\"{translation}\"")
