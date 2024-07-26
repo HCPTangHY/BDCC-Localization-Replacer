@@ -45,6 +45,12 @@ class Replacer:
             for f in files:
                 file_path = f"{root}\\{f}"
                 output_path = file_path.replace('source', 'output', 1)
+                if "Titillium-Regular" in f:
+                    shutil.copyfile(f"{ROOT}\\SourceHanSansCN-Regular.otf", output_path)
+                    continue
+                elif "Titillium-Bold" in f:
+                    shutil.copyfile(f"{ROOT}\\SourceHanSansCN-Bold.otf", output_path)
+                    continue
                 if "DatapackMenu.gd" in f or not (f.endswith(".gd") or f.endswith(".tscn")):
                     shutil.copyfile(file_path, output_path)
                     continue
