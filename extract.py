@@ -25,12 +25,13 @@ def extract_string(
                 context_range = (node.line, node.end_line)
             else:
                 context_range = (stmt.line, stmt.end_line)
-            if range[1] - range[0] <= 2:
+            if range[1] - range[0] <= 0:
                 return {}
             return {range: {"range": range, "context_range": context_range}}
         return {}
-    if node.data == "get_attr":
-        if node.children[0].children[-1] in [
+    if node.data == "getattr":
+        call_name = node.children[-1].value
+        if call_name in [
             "get_node",
             "get_node_or_null",
             "has",
@@ -39,12 +40,17 @@ def extract_string(
             "load",
         ]:
             return {}
-    if node.data == "standalone_call" or node.data == "get_attr_call":
-        call_name = node.children[0].value
+    elif node.data == "standalone_call" or node.data == "getattr_call":
+        call_name = (
+            node.children[0].value
+            if node.data == "standalone_call"
+            else node.children[0].children[-1].value
+        )
         arg_num = (len(node.children) - 2) // 2
         if call_name in [
             "get_node",
             "get_node_or_null",
+            "has",
             "Color",
             "preload",
             "load",
@@ -60,7 +66,12 @@ def extract_string(
         in_stmt = node
     else:
         in_stmt = stmt
-    if node.data == "arith_expr":
+    if expr is not None and expr.data == "asgnmnt_expr":
+        if node.data == "asgnmnt_expr":
+            in_expr = node
+        else:
+            in_expr = expr
+    elif node.data in ["arith_expr", "mdr_expr", "asgnmnt_expr"]:
         in_expr = node
     else:
         in_expr = expr
@@ -83,6 +94,7 @@ if not result_path.exists():
 # path = Path("UI/ModsMenu/ModsMenu.gd")
 
 for file in path.glob("**/*.gd"):
+    # for file in [Path("../BDCC/addons/godot-notes/plugin.gd")]:
     with open(file, "r") as f:
         lines = f.readlines()
         code = "".join(lines)
