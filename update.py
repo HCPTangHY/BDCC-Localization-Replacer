@@ -2,24 +2,27 @@ import json
 from pathlib import Path
 from typing import Dict, List
 
+import shutil
+
 new_path = Path("result")
 result_path = Path("fill")
 old_path = Path("pz")
 
-result_path.mkdir(exist_ok=True)
+if not result_path.exists():
+    shutil.copytree(new_path, result_path, dirs_exist_ok=True)
 
 for file in old_path.glob("**/*.json"):
     new_file = new_path.joinpath(file.relative_to(old_path).with_suffix(".gd.json"))
-    print(new_file)
-    print(file)
+    # print(new_file)
+    # print(file)
 
     if not new_file.exists():
         print(file, "not exist")
         continue
 
-    with open(file, "r") as f:
+    with open(file, "r", encoding="utf-8") as f:
         old_data = json.load(f)
-    with open(new_file, "r") as f:
+    with open(new_file, "r", encoding="utf-8") as f:
         new_data = json.load(f)
 
     old_data_map: Dict[str, List] = {}
@@ -40,26 +43,28 @@ for file in old_path.glob("**/*.json"):
         if original not in new_data_map:
             new_data_map[original] = []
         new_data_map[original].append(item)
-    total = 0
-    match = 0
 
     for original, items in old_data_map.items():
+        valid_items = list(filter(lambda x: x["stage"] == 1 or x["stage"] == 2, items))
         if original in new_data_map:
-            match += len(items)
             new_items = new_data_map[original]
-            if len(new_data_map[original]) != len(items):
-                print(len(new_data_map[original]), len(items))
+            if len(valid_items) <= 0:
+                continue
+            elif len(new_data_map[original]) != len(valid_items):
                 for idx, new_item in enumerate(new_items):
-                    if idx >= len(items):
-                        idx = len(items) - 1
-                    new_item["translation"] = items[idx]["translations"]
-                    new_item["stage"] = 9
+                    if idx >= len(valid_items):
+                        idx = len(valid_items) - 1
+                    new_item["translation"] = valid_items[idx]["translation"]
+                    new_item["stage"] = 2 # questionable
             else:
-                for idx, item in enumerate(items):
+                for idx, item in enumerate(valid_items):
                     new_items[idx]["translation"] = item["translation"]
                     new_items[idx]["stage"] = item["stage"]
         else:
             # print(original)
             pass
-        total += len(items)
-    print(match / total)
+    
+    result_file = result_path.joinpath(file.relative_to(old_path).with_suffix(".gd.json"))
+    
+    with open(result_file, "w", encoding="utf-8") as f:
+        json.dump(new_data, f, ensure_ascii=False, indent=2)

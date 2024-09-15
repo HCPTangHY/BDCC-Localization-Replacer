@@ -66,12 +66,9 @@ def extract_string(
         in_stmt = node
     else:
         in_stmt = stmt
-    if expr is not None and expr.data == "asgnmnt_expr":
-        if node.data == "asgnmnt_expr":
-            in_expr = node
-        else:
-            in_expr = expr
-    elif node.data in ["arith_expr", "mdr_expr", "asgnmnt_expr"]:
+    if expr is not None:
+        in_expr = expr
+    elif node.data in ["arith_expr", "mdr_expr", "asgnmnt_expr", "array"]:
         in_expr = node
     else:
         in_expr = expr
@@ -94,8 +91,8 @@ if not result_path.exists():
 # path = Path("UI/ModsMenu/ModsMenu.gd")
 
 for file in path.glob("**/*.gd"):
-    # for file in [Path("../BDCC/addons/godot-notes/plugin.gd")]:
-    with open(file, "r") as f:
+# for file in [Path("../BDCC/Game/Datapacks/UI/CrotchCode/CodeBlocks/InvHasItemsWithTag.gd")]:
+    with open(file, "r", encoding="utf-8") as f:
         lines = f.readlines()
         code = "".join(lines)
 
@@ -133,11 +130,11 @@ for file in path.glob("**/*.gd"):
     if not target_folder.exists():
         target_folder.mkdir(parents=True)
 
-    with open(target_file, "w") as f:
-        json.dump(result, f, indent=2)
+    with open(target_file, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
 
 for file in path.glob("**/*.tscn"):
-    with open(file, "r") as f:
+    with open(file, "r", encoding='utf-8') as f:
         code = f.readlines()
 
     result = []
@@ -167,5 +164,5 @@ for file in path.glob("**/*.tscn"):
     if not target_folder.exists():
         target_folder.mkdir(parents=True)
 
-    with open(target_file, "w") as f:
-        json.dump(result, f, indent=2)
+    with open(target_file, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
