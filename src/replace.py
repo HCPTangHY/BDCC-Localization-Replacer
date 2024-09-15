@@ -5,7 +5,7 @@ from pathlib import Path
 from ast import literal_eval
 from typing import Union
 
-from .consts import ROOT, WORKSPACE
+from .consts import ROOT
 
 def replace_translation(source_path: Union[Path, str], translation_path: Union[Path, str], output_path: Union[Path, str]):
     if isinstance(source_path, str):
@@ -22,8 +22,8 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
     
     shutil.copytree(source_path, output_path)
     
-    shutil.copyfile(WORKSPACE / "SourceHanSansCN-Regular.otf", output_path / "Fonts" / "Titillium-Regular.otf")
-    shutil.copyfile(WORKSPACE / "SourceHanSansCN-Bold.otf", output_path / "Fonts" / "Titillium-Bold.otf")
+    shutil.copyfile(ROOT / "SourceHanSansCN-Regular.otf", output_path / "Fonts" / "Titillium-Regular.otf")
+    shutil.copyfile(ROOT / "SourceHanSansCN-Bold.otf", output_path / "Fonts" / "Titillium-Bold.otf")
 
     for file in translation_path.glob("**/*.json"):
         source_file = source_path.joinpath(file.relative_to(translation_path)).with_suffix("")
