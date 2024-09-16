@@ -16,9 +16,9 @@ def extract_string(
     if isinstance(node, Token):
         if "STRING" in node.type:
             if expr is None:
-                if "REGULAR_STRING":
+                if node.type == "REGULAR_STRING":
                     range = (node.pos_in_stream + 1, node.end_pos - 1)
-                elif "LONG_STRING":
+                elif node.type == "LONG_STRING":
                     range = (node.pos_in_stream + 3, node.end_pos - 3)
             else:
                 # range = (expr.line, expr.column, expr.end_line, expr.end_column)
@@ -118,7 +118,7 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
             result.append(
                 {
                     "key": str(range),
-                    "original": original,
+                    "original": original.replace("\\n", "__NEWLINE__"),
                     "translation": "",
                     "stage": 0,
                     "context": "".join(lines[stmt_line[0] - 1 : stmt_line[1]]),
@@ -145,7 +145,7 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
 
         start_line = -1
         for idx, line in enumerate(code):
-            if start_line != -1 and (" = " in line or line.startswith('[')):
+            if start_line != -1 and (" = " in line or (line.startswith('[') and line.endswith(']'))):
                 end_line = idx - 1
 
                 result.append(
@@ -172,7 +172,7 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
             result.append(
                 {
                     "key": str((start_line, end_line)),
-                    "original": "".join(code[start_line : end_line + 1]),
+                    "original": "".join(code[start_line : end_line + 1]).replace("\\n","__NEWLINE__"),
                     "translation": "",
                     "stage": 0
                 }

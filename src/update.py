@@ -82,10 +82,10 @@ def update_deprecated(new_path: Union[Path, str], old_path: Union[Path, str], de
             json.dump(new_data, f, ensure_ascii=False, indent=2)
         
         deprecated_file = deprecated_path.joinpath(file.relative_to(old_path).with_suffix(".gd.json"))
-        if not deprecated_file.parent.exists():
-            deprecated_file.parent.mkdir(parents=True)
 
         if len(deprecated_data) > 0:
+            if not deprecated_file.parent.exists():
+                deprecated_file.parent.mkdir(parents=True)
             with open(deprecated_file, "w", encoding="utf-8") as f:
                 json.dump(deprecated_data, f, ensure_ascii=False, indent=2)
 
@@ -117,6 +117,12 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
             old_data = json.load(f)
         with open(new_file, "r", encoding="utf-8") as f:
             new_data = json.load(f)
+        
+        for item in old_data:
+            item["original"] = item["original"].replace("\\n", "\n")
+            item["translation"] = item["translation"].replace("\\n", "\n")
+            item["original"] = item["original"].replace("__NEWLINE__", "\\n")
+            item["translation"] = item["translation"].replace("__NEWLINE__", "\\n")
 
         new_data, deprecated_data = update_data(old_data, new_data)
         
@@ -124,10 +130,10 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
             json.dump(new_data, f, ensure_ascii=False, indent=2)
         
         deprecated_file = deprecated_path.joinpath(file.relative_to(old_path))
-        if not deprecated_file.parent.exists():
-            deprecated_file.parent.mkdir(parents=True)
         
         if len(deprecated_data) > 0:
+            if not deprecated_file.parent.exists():
+                deprecated_file.parent.mkdir(parents=True)
             with open(deprecated_file, "w", encoding="utf-8") as f:
                 json.dump(deprecated_data, f, ensure_ascii=False, indent=2)
 
