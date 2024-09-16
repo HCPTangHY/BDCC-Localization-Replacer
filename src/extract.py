@@ -145,15 +145,6 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
 
         start_line = -1
         for idx, line in enumerate(code):
-            if (
-                "text = " in line
-                or "Name = " in line
-                or "Description = " in line
-                or "tooltip = " in line
-                or "title = " in line
-            ):
-                start_line = idx
-                continue
             if start_line != -1 and (" = " in line or line.startswith('[')):
                 end_line = idx - 1
 
@@ -167,6 +158,15 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
                 )
 
                 start_line = -1
+            if (
+                "text = " in line
+                or "Name = " in line
+                or "Description = " in line
+                or "tooltip = " in line
+                or "title = " in line
+            ):
+                start_line = idx
+                continue
         if start_line != -1:
             end_line = len(code) - 1
             result.append(
