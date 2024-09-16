@@ -3,8 +3,8 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, Union
 
-from log import logger
-from consts import DIR_TRANS, DIR_FETCH, DIR_DEPRECATED
+from .log import logger
+from .consts import DIR_TRANS, DIR_FETCH, DIR_DEPRECATED
 
 def update_data(old_data: List, new_data: List) -> Union[List, List]:
     old_data_map: Dict[str, List] = {}
