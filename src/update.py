@@ -26,7 +26,7 @@ def update_data(old_data: List, new_data: List) -> Union[List, List]:
         new_data_map[original].append(item)
 
     for original, items in old_data_map.items():
-        valid_items = list(filter(lambda x: x["stage"] == 1 or x["stage"] == 2, items))
+        valid_items = list(filter(lambda x: x["stage"] != 0 and len(x["translation"]) > 0, items))
         if original in new_data_map:
             new_items = new_data_map[original]
             if len(valid_items) <= 0:
