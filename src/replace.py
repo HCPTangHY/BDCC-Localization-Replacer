@@ -6,6 +6,7 @@ from ast import literal_eval
 from typing import Union
 
 from .consts import ROOT
+from .log import logger
 
 def replace_translation(source_path: Union[Path, str], translation_path: Union[Path, str], output_path: Union[Path, str]):
     if isinstance(source_path, str):
@@ -27,6 +28,10 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
 
     for file in translation_path.glob("**/*.json"):
         source_file = source_path.joinpath(file.relative_to(translation_path)).with_suffix("")
+
+        if not source_file.exists():
+            logger.warning(f"{file} not exist")
+
         output_file = output_path.joinpath(file.relative_to(translation_path)).with_suffix("")
         with open(file, "r", encoding="utf-8") as f:
             trans_data = json.load(f)

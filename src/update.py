@@ -3,6 +3,8 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, Union
 
+from .log import logger
+
 def update_data(old_data: List, new_data: List) -> Union[List, List]:
     old_data_map: Dict[str, List] = {}
     new_data_map: Dict[str, List] = {}
@@ -65,7 +67,7 @@ def update_deprecated(new_path: Union[Path, str], old_path: Union[Path, str], de
         new_file = new_path.joinpath(file.relative_to(old_path).with_suffix(".gd.json"))
 
         if not new_file.exists():
-            print(file, "not exist")
+            logger.warning(f"{file} has no corresponding new dict file")
             continue
 
         with open(file, "r", encoding="utf-8") as f:
@@ -107,7 +109,7 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
         new_file = new_path.joinpath(file.relative_to(old_path))
 
         if not new_file.exists():
-            print(file, "not exist")
+            logger.warning(f"{file} has no corresponding new dict file")
             continue
 
         with open(file, "r", encoding="utf-8") as f:
