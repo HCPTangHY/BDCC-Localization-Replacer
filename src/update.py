@@ -62,7 +62,7 @@ def update_deprecated(new_path: Union[Path, str], old_path: Union[Path, str], de
     deprecated_path.mkdir(parents=True, exist_ok=True)
     
     for file in old_path.glob("**/*.json"):
-        if "deprecated" in file.as_posix():
+        if "过时" in file.as_posix():
             continue
 
         new_file = new_path.joinpath(file.relative_to(old_path).with_suffix(".gd.json"))
@@ -104,7 +104,7 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
     deprecated_path.mkdir(parents=True, exist_ok=True)
     
     for file in old_path.glob("**/*.json"):
-        if "deprecated" in file.as_posix():
+        if "过时" in file.as_posix():
             continue
 
         new_file = new_path.joinpath(file.relative_to(old_path))
