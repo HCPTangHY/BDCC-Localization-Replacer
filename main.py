@@ -31,4 +31,4 @@ def translate_old():
 
 # trans.trans_main()
 if __name__ == '__main__':
-    translate_old()
+    translate_new()

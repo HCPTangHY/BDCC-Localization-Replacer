@@ -7,6 +7,8 @@ from typing import Dict, Tuple, Union
 from gdtoolkit.parser import parser
 from lark import Tree, Token
 
+from .consts import DIR_SOURCE, DIR_TRANS
+
 def extract_string(
     node: Tree, stmt: Tree = None, expr: Tree = None
 ) -> Dict[Tuple, Dict]:
@@ -117,6 +119,8 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
                 {
                     "key": str(range),
                     "original": original,
+                    "translation": "",
+                    "stage": 0,
                     "context": "".join(lines[stmt_line[0] - 1 : stmt_line[1]]),
                 }
             )
@@ -139,6 +143,7 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
 
         result = []
 
+        start_line = -1
         for idx, line in enumerate(code):
             if (
                 "text = " in line
@@ -147,12 +152,31 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
                 or "tooltip = " in line
                 or "title = " in line
             ):
+                start_line = idx
+                continue
+            if start_line != -1 and (" = " in line or line.startswith('[')):
+                end_line = idx - 1
+
                 result.append(
                     {
-                        "key": str(idx),
-                        "original": line,
+                        "key": str((start_line, end_line)),
+                        "original": "".join(code[start_line : end_line + 1]),
+                        "translation": "",
+                        "stage": 0
                     }
                 )
+
+                start_line = -1
+        if start_line != -1:
+            end_line = len(code) - 1
+            result.append(
+                {
+                    "key": str((start_line, end_line)),
+                    "original": "".join(code[start_line : end_line + 1]),
+                    "translation": "",
+                    "stage": 0
+                }
+            )
 
         if len(result) == 0:
             continue
@@ -168,7 +192,4 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
             json.dump(result, f, indent=2, ensure_ascii=False)
 
 if __name__ == "__main__":
-    source_path = Path("../BDCC")
-    result_path = Path("result/")
-    
-    extract(source_path, result_path)
+    extract(DIR_SOURCE, DIR_TRANS)

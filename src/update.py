@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Union
 
 from .log import logger
+from .consts import DIR_TRANS, DIR_FETCH, DIR_DEPRECATED
 
 def update_data(old_data: List, new_data: List) -> Union[List, List]:
     old_data_map: Dict[str, List] = {}
@@ -131,8 +132,4 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
                 json.dump(deprecated_data, f, ensure_ascii=False, indent=2)
 
 if __name__ == "__main__":
-    new_path = Path("result")
-    result_path = Path("fill")
-    old_path = Path("pz")
-    
-    update_deprecated(new_path, result_path, old_path)
+    update(DIR_TRANS, DIR_FETCH, DIR_DEPRECATED)

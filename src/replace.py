@@ -5,7 +5,7 @@ from pathlib import Path
 from ast import literal_eval
 from typing import Union
 
-from .consts import ROOT
+from .consts import ROOT, DIR_SOURCE, DIR_TRANS, DIR_OUTPUT
 from .log import logger
 
 def replace_translation(source_path: Union[Path, str], translation_path: Union[Path, str], output_path: Union[Path, str]):
@@ -46,7 +46,7 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
                 line = literal_eval(item["key"])
                 start = line[0]
                 end = line[1]
-                if "translation" not in item:
+                if item["stage"] == 0 or "translation" not in item:
                     new_code += gd_code[prev_end:end]
                 else:
                     translation = item["translation"]
@@ -58,19 +58,24 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
         elif source_file.suffix == ".tscn":
             with open(source_file, "r", encoding="utf-8") as f:
                 tscn_code = f.readlines()
+            new_tscn_code = []
+            prev_end = 0
             for item in trans_data:
-                if "translation" not in item:
-                    continue
-                line = int(item["key"])
-                translation = item["translation"]
-                tscn_code[line] = translation
+                line = literal_eval(item["key"])
+                start = line[0]
+                end = line[1] + 1
+                if item["stage"] == 0 or "translation" not in item:
+                    new_tscn_code.extend(tscn_code[prev_end: end])
+                else:
+                    translation = item["translation"].replace("\\n", "\n")
+                    new_tscn_code.extend(tscn_code[prev_end: start])
+                    new_tscn_code.append(translation)
+                prev_end = end
+            new_tscn_code.extend(tscn_code[prev_end:])
             with open(output_file, "w", encoding="utf-8") as f:
-                f.writelines(tscn_code)
+                f.writelines("".join(new_tscn_code))
         else:
             raise ValueError
 
 if __name__ == '__main__':
-    translation_path = Path("fill")
-    source_path = Path("../BDCC")
-
-    replace_translation(source_path, translation_path)
+    replace_translation(DIR_SOURCE, DIR_TRANS, DIR_OUTPUT)

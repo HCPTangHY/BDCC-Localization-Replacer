@@ -6,5 +6,6 @@ DIR_SOURCE = ROOT / "source"
 DIR_FETCH = ROOT / "fetch"
 DIR_OUTPUT = ROOT / "output"
 DIR_DEPRECATED = ROOT / "deprecated"
+DIR_DIFF = ROOT / "diff"
 
 
