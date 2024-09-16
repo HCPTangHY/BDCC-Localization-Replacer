@@ -145,7 +145,7 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
 
         start_line = -1
         for idx, line in enumerate(code):
-            if start_line != -1 and (" = " in line or (line.startswith('[') and line.endswith(']'))):
+            if start_line != -1 and (" = " in line or (line.startswith('[') and line.endswith(']\n'))):
                 end_line = idx - 1
 
                 result.append(
