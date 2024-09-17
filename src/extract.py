@@ -121,7 +121,7 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
                     original = lines[range[0] - 1][range[1] - 1 :]
                     original += "".join(lines[range[0] : range[2] - 1])
                     original += lines[range[2] - 1][: range[3] - 1]
-            if "://" in original:
+            if "://" in original and "https://" not in original:
                 continue
             result.append(
                 {
