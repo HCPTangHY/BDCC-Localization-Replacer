@@ -72,9 +72,15 @@ def extract_string(
         in_expr = expr
     elif node.data in ["arith_expr", "mdr_expr", "asgnmnt_expr", "array"]:
         in_expr = node
+    elif node.data == "subscr_expr":
+        return {}
     else:
         in_expr = expr
-    children = node.children
+    if node.data == "c_dict_element":
+        # ignore key in dict
+        children = node.children[1:]
+    else:
+        children = node.children
     for child in children:
         str_list = extract_string(child, stmt=in_stmt, expr=in_expr)
         for key, value in str_list.items():
@@ -115,6 +121,8 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
                     original = lines[range[0] - 1][range[1] - 1 :]
                     original += "".join(lines[range[0] : range[2] - 1])
                     original += lines[range[2] - 1][: range[3] - 1]
+            if "://" in original:
+                continue
             result.append(
                 {
                     "key": str(range),
