@@ -50,6 +50,7 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
                     new_code += gd_code[prev_end:end]
                 else:
                     translation = item["translation"]
+                    translation = translation.replace("__NEWLINE__", "\\n")
                     new_code += gd_code[prev_end:start] + translation
                 prev_end = end
             new_code += gd_code[prev_end:]

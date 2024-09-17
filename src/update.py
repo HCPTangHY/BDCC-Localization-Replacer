@@ -121,8 +121,6 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
         for item in old_data:
             item["original"] = item["original"].replace("\\n", "\n")
             item["translation"] = item["translation"].replace("\\n", "\n")
-            item["original"] = item["original"].replace("__NEWLINE__", "\\n")
-            item["translation"] = item["translation"].replace("__NEWLINE__", "\\n")
 
         new_data, deprecated_data = update_data(old_data, new_data)
         
