@@ -25,6 +25,8 @@ def extract_string(
                 range = (expr.meta.start_pos, expr.meta.end_pos)
             if stmt is None:
                 context_range = (node.line, node.end_line)
+            elif stmt == "no context":
+                context_range = (node.line, node.end_line - 1)
             else:
                 context_range = (stmt.line, stmt.end_line)
             if range[1] - range[0] <= 0:
@@ -78,7 +80,7 @@ def extract_string(
         else:
             # split when too long
             in_expr = None
-            in_stmt = None
+            in_stmt = "no context"
     elif node.data == "subscr_expr":
         return {}
     else:
