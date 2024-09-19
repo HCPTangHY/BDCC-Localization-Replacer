@@ -70,8 +70,15 @@ def extract_string(
         in_stmt = stmt
     if expr is not None:
         in_expr = expr
-    elif node.data in ["arith_expr", "mdr_expr", "asgnmnt_expr", "array"]:
+    elif node.data in ["arith_expr", "mdr_expr", "asgnmnt_expr"]:
         in_expr = node
+    elif node.data == "array":
+        if len(node.children) <= 10:
+            in_expr = node
+        else:
+            # split when too long
+            in_expr = None
+            in_stmt = None
     elif node.data == "subscr_expr":
         return {}
     else:
