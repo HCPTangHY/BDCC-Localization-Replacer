@@ -11,6 +11,7 @@ def update_data(old_data: List, new_data: List) -> Union[List, List]:
     new_data_map: Dict[str, List] = {}
     
     deprecated_data = []
+    is_diff = False
 
     for item in old_data:
         original = item["original"]
@@ -30,22 +31,24 @@ def update_data(old_data: List, new_data: List) -> Union[List, List]:
         valid_items = list(filter(lambda x: x["stage"] != 0 and len(x["translation"]) > 0, items))
         if original in new_data_map:
             new_items = new_data_map[original]
-            if len(valid_items) <= 0:
-                continue
-            elif len(new_data_map[original]) != len(valid_items):
+            if len(new_data_map[original]) != len(items):
+                is_diff = True
+                if len(valid_items) <= 0:
+                    continue
                 for idx, new_item in enumerate(new_items):
                     if idx >= len(valid_items):
                         idx = len(valid_items) - 1
                     new_item["translation"] = valid_items[idx]["translation"]
                     new_item["stage"] = 2 # questionable
             else:
-                for idx, item in enumerate(valid_items):
+                for idx, item in enumerate(items):
                     new_items[idx]["translation"] = item["translation"]
                     new_items[idx]["stage"] = item["stage"]
         else:
             deprecated_data += valid_items
+            is_diff = True
     
-    return new_data, deprecated_data
+    return new_data, deprecated_data, is_diff
 
 def update_deprecated(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_path: Union[Path, str]):
     if isinstance(new_path, str):
@@ -76,7 +79,7 @@ def update_deprecated(new_path: Union[Path, str], old_path: Union[Path, str], de
         with open(new_file, "r", encoding="utf-8") as f:
             new_data = json.load(f)
 
-        new_data, deprecated_data = update_data(old_data, new_data)
+        new_data, deprecated_data, _ = update_data(old_data, new_data)
         
         with open(new_file, "w", encoding="utf-8") as f:
             json.dump(new_data, f, ensure_ascii=False, indent=2)
@@ -122,7 +125,7 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
             item["original"] = item["original"].replace("\\n", "\n")
             item["translation"] = item["translation"].replace("\\n", "\n")
 
-        new_data, deprecated_data = update_data(old_data, new_data)
+        new_data, deprecated_data, is_diff = update_data(old_data, new_data)
         
         with open(new_file, "w", encoding="utf-8") as f:
             json.dump(new_data, f, ensure_ascii=False, indent=2)
@@ -133,10 +136,11 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
         if len(deprecated_data) > 0:
             if not deprecated_file.parent.exists():
                 deprecated_file.parent.mkdir(parents=True)
-            if not change_file.parent.exists():
-                change_file.parent.mkdir(parents=True)
             with open(deprecated_file, "w", encoding="utf-8") as f:
                 json.dump(deprecated_data, f, ensure_ascii=False, indent=2)
+        if is_diff:
+            if not change_file.parent.exists():
+                change_file.parent.mkdir(parents=True)
             shutil.copyfile(new_file, change_file)
         else:
             old_key_set = set(item["key"] for item in old_data)
