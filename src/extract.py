@@ -7,7 +7,7 @@ from typing import Dict, Tuple, Union
 from gdtoolkit.parser import parser
 from lark import Tree, Token
 
-from .consts import DIR_SOURCE, DIR_TRANS
+from consts import DIR_SOURCE, DIR_TRANS
 
 def extract_string(
     node: Tree, stmt: Tree = None, expr: Tree = None, func: str = ""
@@ -90,8 +90,8 @@ def extract_string(
         children = node.children[1:]
     else:
         children = node.children
-    if node.data == "func_header":
-        in_func = node.children[0].value
+    if node.data == "func_def":
+        in_func = node.children[0].children[0].value
     else:
         in_func = func
     for child in children:
