@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Union
 
 from .log import logger
-from .consts import DIR_TRANS, DIR_FETCH, DIR_DEPRECATED
+from .consts import DIR_TRANS, DIR_FETCH, DIR_DEPRECATED, DIR_CHANGE
 
 def update_data(old_data: List, new_data: List) -> Union[List, List]:
     old_data_map: Dict[str, List] = {}
@@ -89,7 +89,7 @@ def update_deprecated(new_path: Union[Path, str], old_path: Union[Path, str], de
             with open(deprecated_file, "w", encoding="utf-8") as f:
                 json.dump(deprecated_data, f, ensure_ascii=False, indent=2)
 
-def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_path: Union[Path, str]):
+def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_path: Union[Path, str], change_path: Union[Path, str]):
     if isinstance(new_path, str):
         new_path = Path(new_path)
 
@@ -128,12 +128,25 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
             json.dump(new_data, f, ensure_ascii=False, indent=2)
         
         deprecated_file = deprecated_path.joinpath(file.relative_to(old_path))
+        change_file = change_path.joinpath(file.relative_to(old_path))
         
         if len(deprecated_data) > 0:
             if not deprecated_file.parent.exists():
                 deprecated_file.parent.mkdir(parents=True)
+            if not change_file.parent.exists():
+                change_file.parent.mkdir(parents=True)
             with open(deprecated_file, "w", encoding="utf-8") as f:
                 json.dump(deprecated_data, f, ensure_ascii=False, indent=2)
+            shutil.copyfile(new_file, change_file)
+        else:
+            old_key_set = set(item["key"] for item in old_data)
+            new_key_set = set(item["key"] for item in new_data)
+            old_ori_set = set(item["original"] for item in old_data)
+            new_ori_set = set(item["original"] for item in new_data)
+            if old_key_set != new_key_set or old_ori_set != new_ori_set:
+                if not change_file.parent.exists():
+                    change_file.parent.mkdir(parents=True)
+                shutil.copyfile(new_file, change_file)
 
 if __name__ == "__main__":
-    update(DIR_TRANS, DIR_FETCH, DIR_DEPRECATED)
+    update(DIR_TRANS, DIR_FETCH, DIR_DEPRECATED, DIR_CHANGE)

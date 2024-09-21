@@ -4,7 +4,7 @@ import re
 from src.extract import extract
 from src.replace import replace_translation
 from src.update import update, update_deprecated
-from src.consts import DIR_SOURCE, DIR_OUTPUT, DIR_TRANS, DIR_FETCH, DIR_DEPRECATED
+from src.consts import DIR_SOURCE, DIR_OUTPUT, DIR_TRANS, DIR_FETCH, DIR_DEPRECATED, DIR_CHANGE
 
 # from src import trans
 def main():
@@ -17,7 +17,7 @@ def translate_new():
     log.logger.info("Extract new translation items...")
     extract(DIR_SOURCE, DIR_TRANS)
     log.logger.info("Migrate old translation items...")
-    update(DIR_TRANS, DIR_FETCH, DIR_DEPRECATED)
+    update(DIR_TRANS, DIR_FETCH, DIR_DEPRECATED, DIR_CHANGE)
     log.logger.info("Replace source code with new translation items...")
     replace_translation(DIR_SOURCE, DIR_TRANS, DIR_OUTPUT)
     
