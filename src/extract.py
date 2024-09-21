@@ -10,7 +10,7 @@ from lark import Tree, Token
 from .consts import DIR_SOURCE, DIR_TRANS
 
 def extract_string(
-    node: Tree, stmt: Tree = None, expr: Tree = None
+    node: Tree, stmt: Tree = None, expr: Tree = None, func: str = ""
 ) -> Dict[Tuple, Dict]:
     result = {}
     if isinstance(node, Token):
@@ -31,7 +31,7 @@ def extract_string(
                 context_range = (stmt.line, stmt.end_line)
             if range[1] - range[0] <= 0:
                 return {}
-            return {range: {"range": range, "context_range": context_range}}
+            return {range: {"range": range, "context_range": context_range, "func": func}}
         return {}
     if node.data == "getattr":
         call_name = node.children[-1].value
@@ -90,8 +90,12 @@ def extract_string(
         children = node.children[1:]
     else:
         children = node.children
+    if node.data == "func_header":
+        in_func = node.children[0].value
+    else:
+        in_func = func
     for child in children:
-        str_list = extract_string(child, stmt=in_stmt, expr=in_expr)
+        str_list = extract_string(child, stmt=in_stmt, expr=in_expr, func=in_func)
         for key, value in str_list.items():
             result[key] = value
     return result
@@ -121,6 +125,7 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
         for idx, item in enumerate(ranges.values()):
             range = item["range"]
             stmt_line = item["context_range"]
+            func = item["func"]
             if len(range) == 2:
                 original = code[range[0] : range[1]]
             elif len(range) == 4:
@@ -132,13 +137,19 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
                     original += lines[range[2] - 1][: range[3] - 1]
             if "://" in original and "https://" not in original:
                 continue
+            elif original == " ":
+                original = "\" \""
+                range = (range[0] + 1, range[1] + 1)
+            context = "".join(lines[stmt_line[0] - 1 : stmt_line[1]])
+            if func != "":
+                context = f"Function Name: {func}\n{context}"
             result.append(
                 {
                     "key": str(range),
                     "original": original.replace("\\n", "__NEWLINE__"),
                     "translation": "",
                     "stage": 0,
-                    "context": "".join(lines[stmt_line[0] - 1 : stmt_line[1]]),
+                    "context": context,
                 }
             )
         if len(result) == 0:
@@ -161,8 +172,10 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
         result = []
 
         start_line = -1
+        node_name = ""
         for idx, line in enumerate(code):
-            if start_line != -1 and (" = " in line or (line.startswith('[') and line.endswith(']\n'))):
+            new_node = line.startswith('[') and line.endswith(']\n')
+            if start_line != -1 and (" = " in line or new_node):
                 end_line = idx - 1
 
                 result.append(
@@ -170,7 +183,8 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
                         "key": str((start_line, end_line)),
                         "original": "".join(code[start_line : end_line + 1]),
                         "translation": "",
-                        "stage": 0
+                        "stage": 0,
+                        "context": node_name
                     }
                 )
 
@@ -183,7 +197,8 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
                 or "title = " in line
             ):
                 start_line = idx
-                continue
+            if new_node:
+                node_name = line
         if start_line != -1:
             end_line = len(code) - 1
             result.append(
