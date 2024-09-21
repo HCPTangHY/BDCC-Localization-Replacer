@@ -7,7 +7,7 @@ from typing import Dict, Tuple, Union
 from gdtoolkit.parser import parser
 from lark import Tree, Token
 
-from consts import DIR_SOURCE, DIR_TRANS
+from .consts import DIR_SOURCE, DIR_TRANS
 
 def extract_string(
     node: Tree, stmt: Tree = None, expr: Tree = None, func: str = ""
