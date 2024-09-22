@@ -104,6 +104,8 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
     
     if deprecated_path.exists():
         shutil.rmtree(deprecated_path)
+    if change_path.exists():
+        shutil.rmtree(change_path)
     deprecated_path.mkdir(parents=True, exist_ok=True)
     
     for file in old_path.glob("**/*.json"):
