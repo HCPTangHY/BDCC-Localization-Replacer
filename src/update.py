@@ -39,7 +39,7 @@ def update_data(old_data: List, new_data: List) -> Union[List, List]:
                     if idx >= len(valid_items):
                         idx = len(valid_items) - 1
                     new_item["translation"] = valid_items[idx]["translation"]
-                    new_item["stage"] = 2 # questionable
+                    new_item["stage"] = 1
             else:
                 for idx, item in enumerate(items):
                     new_items[idx]["translation"] = item["translation"]
@@ -129,9 +129,9 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
 
         # put original text for text with '_'
         for item in new_data:
-            if "_" in item["original"] and item["translation"] == "":
+            if item["translation"] == "" and "_" in item["original"] and "say=" not in item["original"]:
                 item["translation"] = item["original"]
-                item["stage"] = 2
+                item["stage"] = 1
                 is_diff = True
         
         with open(new_file, "w", encoding="utf-8") as f:
