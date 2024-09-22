@@ -46,7 +46,7 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
                 line = literal_eval(item["key"])
                 start = line[0]
                 end = line[1]
-                if item["stage"] == 0 or "translation" not in item:
+                if item["stage"] == 0 or item["translation"] == "":
                     new_code += gd_code[prev_end:end]
                 else:
                     translation = item["translation"]
@@ -65,7 +65,7 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
                 line = literal_eval(item["key"])
                 start = line[0]
                 end = line[1] + 1
-                if item["stage"] == 0 or "translation" not in item:
+                if item["stage"] == 0 or item["translation"] == "":
                     new_tscn_code.extend(tscn_code[prev_end: end])
                 else:
                     translation = item["translation"].replace("\\n", "\n")
