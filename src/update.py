@@ -126,6 +126,13 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
             item["translation"] = item["translation"].replace("\\n", "\n")
 
         new_data, deprecated_data, is_diff = update_data(old_data, new_data)
+
+        # put original text for text with '_'
+        for item in new_data:
+            if "_" in item["original"] and item["translation"] == "":
+                item["translation"] = item["original"]
+                item["stage"] = 2
+                is_diff = True
         
         with open(new_file, "w", encoding="utf-8") as f:
             json.dump(new_data, f, ensure_ascii=False, indent=2)

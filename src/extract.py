@@ -15,9 +15,15 @@ def extract_string(
     result = {}
     if isinstance(node, Token):
         if "STRING" in node.type:
+            text = node.value
             if expr is None:
                 if node.type == "REGULAR_STRING":
-                    range = (node.pos_in_stream + 1, node.end_pos - 1)
+                    if "://" in text and "https://" not in text:
+                        return {}
+                    elif text == " ":
+                        range = (node.pos_in_stream, node.end_pos)
+                    else:
+                        range = (node.pos_in_stream + 1, node.end_pos - 1)
                 elif node.type == "LONG_STRING":
                     range = (node.pos_in_stream + 3, node.end_pos - 3)
             else:
@@ -135,11 +141,6 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
                     original = lines[range[0] - 1][range[1] - 1 :]
                     original += "".join(lines[range[0] : range[2] - 1])
                     original += lines[range[2] - 1][: range[3] - 1]
-            if "://" in original and "https://" not in original:
-                continue
-            elif original == " ":
-                original = "\" \""
-                range = (range[0] + 1, range[1] + 1)
             context = "".join(lines[stmt_line[0] - 1 : stmt_line[1]])
             if func != "":
                 context = f"Function Name: {func}\n{context}"
