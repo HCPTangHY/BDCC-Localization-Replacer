@@ -1,5 +1,6 @@
 import json
 import shutil
+import re
 
 from pathlib import Path
 from ast import literal_eval
@@ -7,6 +8,10 @@ from typing import Union
 
 from .consts import ROOT, DIR_SOURCE, DIR_TRANS, DIR_OUTPUT
 from .log import logger
+
+BOLD_RE = re.compile(r"custom_fonts/bold_font = (.*)")
+BOLD_ITALIC_RE = re.compile(r"custom_fonts/bold_italic_font = (.*)")
+REGULAR_ITALIC_RE = re.compile(r"custom_fonts/regular_italic_font = (.*)")
 
 def replace_translation(source_path: Union[Path, str], translation_path: Union[Path, str], output_path: Union[Path, str]):
     if isinstance(source_path, str):
@@ -73,8 +78,19 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
                     new_tscn_code.append(translation)
                 prev_end = end
             new_tscn_code.extend(tscn_code[prev_end:])
+            
+            new_tscn_code = "".join(new_tscn_code)
+
+            # the italic Chinese charactes do not display in Godot 3.5
+            if source_file.stem == "GameUI":
+                # get bold font
+                bold_font = re.search(BOLD_RE, new_tscn_code)
+                # replace bold_italic and regular_italic with bold_font
+                new_tscn_code = re.sub(BOLD_ITALIC_RE, bold_font.group(1), new_tscn_code)
+                new_tscn_code = re.sub(REGULAR_ITALIC_RE, bold_font.group(1), new_tscn_code)
+
             with open(output_file, "w", encoding="utf-8") as f:
-                f.writelines("".join(new_tscn_code))
+                f.writelines(new_tscn_code)
         else:
             raise ValueError
 

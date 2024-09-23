@@ -131,7 +131,7 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
 
         # put original text for text with '_'
         for item in new_data:
-            if item["translation"] == "" and "_" in item["original"] and "say=" not in item["original"]:
+            if item["translation"] == "" and "_" in item["original"] and "say=" not in item["original"] and "__NEWLINE__" not in item["original"]:
                 item["translation"] = item["original"]
                 item["stage"] = 1
                 is_diff = True
