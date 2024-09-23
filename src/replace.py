@@ -10,8 +10,8 @@ from .consts import ROOT, DIR_SOURCE, DIR_TRANS, DIR_OUTPUT
 from .log import logger
 
 BOLD_RE = re.compile(r"custom_fonts/bold_font = (.*)")
-BOLD_ITALIC_RE = re.compile(r"custom_fonts/bold_italic_font = (.*)")
-REGULAR_ITALIC_RE = re.compile(r"custom_fonts/regular_italic_font = (.*)")
+BOLD_ITALIC_RE = re.compile(r"custom_fonts/bold_italics_font = (.*)")
+REGULAR_ITALIC_RE = re.compile(r"custom_fonts/italics_font = (.*)")
 
 def replace_translation(source_path: Union[Path, str], translation_path: Union[Path, str], output_path: Union[Path, str]):
     if isinstance(source_path, str):
