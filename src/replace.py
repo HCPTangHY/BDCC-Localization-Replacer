@@ -93,10 +93,10 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
                 f.writelines(new_tscn_code)
         else:
             raise ValueError
-    for file in output_path.glob("**/*.tres"):
+    for file in output_path.glob("**/*.tscn"):
         with open(file, "r", encoding="utf-8") as f:
             code = f.read()
-        if "Titilium" not in code:
+        if "Titillium" not in code:
             continue
         code = code.replace("Titillium-BoldItalic.otf", "Titillium-Bold.otf")
         code = code.replace("Titillium-RegularItalic.otf", "Titillium-Bold.otf")
