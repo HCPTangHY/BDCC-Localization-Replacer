@@ -10,8 +10,8 @@ from .consts import ROOT, DIR_SOURCE, DIR_TRANS, DIR_OUTPUT
 from .log import logger
 
 BOLD_RE = re.compile(r"custom_fonts/bold_font = (.*)")
-BOLD_ITALIC_RE = re.compile(r"custom_fonts/bold_italics_font = (.*)")
-REGULAR_ITALIC_RE = re.compile(r"custom_fonts/italics_font = (.*)")
+BOLD_ITALIC_RE = re.compile(r"(custom_fonts/bold_italics_font = ).*")
+REGULAR_ITALIC_RE = re.compile(r"(custom_fonts/italics_font = ).*")
 
 def replace_translation(source_path: Union[Path, str], translation_path: Union[Path, str], output_path: Union[Path, str]):
     if isinstance(source_path, str):
@@ -86,8 +86,8 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
                 # get bold font
                 bold_font = re.search(BOLD_RE, new_tscn_code)
                 # replace bold_italic and regular_italic with bold_font
-                new_tscn_code = re.sub(BOLD_ITALIC_RE, bold_font.group(1), new_tscn_code)
-                new_tscn_code = re.sub(REGULAR_ITALIC_RE, bold_font.group(1), new_tscn_code)
+                new_tscn_code = re.sub(BOLD_ITALIC_RE, rf"\g<1>{bold_font.group(1)}", new_tscn_code)
+                new_tscn_code = re.sub(REGULAR_ITALIC_RE, rf"\g<1>{bold_font.group(1)}", new_tscn_code)
 
             with open(output_file, "w", encoding="utf-8") as f:
                 f.writelines(new_tscn_code)
