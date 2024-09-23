@@ -88,14 +88,20 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
                 # replace bold_italic and regular_italic with bold_font
                 new_tscn_code = re.sub(BOLD_ITALIC_RE, rf"\g<1>{bold_font.group(1)}", new_tscn_code)
                 new_tscn_code = re.sub(REGULAR_ITALIC_RE, rf"\g<1>{bold_font.group(1)}", new_tscn_code)
-            else:
-                new_tscn_code = new_tscn_code.replace("Titillium-BoldItalic.otf", "Titillium-Bold.otf")
-                new_tscn_code = new_tscn_code.replace("Titillium-RegularItalic.otf", "Titillium-Regular.otf")
 
             with open(output_file, "w", encoding="utf-8") as f:
                 f.writelines(new_tscn_code)
         else:
             raise ValueError
+    for file in output_path.glob("**/*.tres"):
+        with open(file, "r", encoding="utf-8") as f:
+            code = f.read()
+        if "Titilium" not in code:
+            continue
+        code = code.replace("Titillium-BoldItalic.otf", "Titillium-Bold.otf")
+        code = code.replace("Titillium-RegularItalic.otf", "Titillium-Bold.otf")
+        with open(file, "w", encoding="utf-8") as f:
+            f.write(code)
 
 if __name__ == '__main__':
     replace_translation(DIR_SOURCE, DIR_TRANS, DIR_OUTPUT)
