@@ -81,7 +81,7 @@ def extract_string(
     elif node.data in ["arith_expr", "mdr_expr", "asgnmnt_expr"]:
         in_expr = node
     elif node.data == "array":
-        if len(node.children) <= 24:
+        if len(node.children) <= 18:
             in_expr = node
         else:
             # split when too long
