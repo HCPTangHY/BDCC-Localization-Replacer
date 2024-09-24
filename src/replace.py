@@ -4,7 +4,7 @@ import re
 
 from pathlib import Path
 from ast import literal_eval
-from typing import Union
+from typing import Union, Dict
 
 from .consts import ROOT, DIR_SOURCE, DIR_TRANS, DIR_OUTPUT
 from .log import logger
@@ -12,6 +12,18 @@ from .log import logger
 BOLD_RE = re.compile(r"custom_fonts/bold_font = (.*)")
 BOLD_ITALIC_RE = re.compile(r"(custom_fonts/bold_italics_font = ).*")
 REGULAR_ITALIC_RE = re.compile(r"(custom_fonts/italics_font = ).*")
+
+def is_replacable(pz_item: Dict) -> bool:
+    if pz_item["stage"] == 0:
+        return False
+    elif pz_item["stage"] == 1:
+        # if set to 'translated', always replace
+        return True
+    elif pz_item["translation"] != "":
+        # otherwise, replace only if the translation is not empty
+        return True
+    return False
+    
 
 def replace_translation(source_path: Union[Path, str], translation_path: Union[Path, str], output_path: Union[Path, str]):
     if isinstance(source_path, str):
@@ -51,7 +63,7 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
                 line = literal_eval(item["key"])
                 start = line[0]
                 end = line[1]
-                if item["stage"] == 0 or item["translation"] == "":
+                if is_replacable(item):
                     new_code += gd_code[prev_end:end]
                 else:
                     translation = item["translation"]
@@ -70,7 +82,7 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
                 line = literal_eval(item["key"])
                 start = line[0]
                 end = line[1] + 1
-                if item["stage"] == 0 or item["translation"] == "":
+                if is_replacable(item):
                     new_tscn_code.extend(tscn_code[prev_end: end])
                 else:
                     translation = item["translation"].replace("\\n", "\n")
@@ -105,3 +117,4 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
 
 if __name__ == '__main__':
     replace_translation(DIR_SOURCE, DIR_TRANS, DIR_OUTPUT)
+

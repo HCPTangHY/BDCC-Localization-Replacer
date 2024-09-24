@@ -175,7 +175,7 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
         start_line = -1
         node_name = ""
         for idx, line in enumerate(code):
-            new_node = line.startswith('[') and line.endswith(']\n')
+            new_node = (line.startswith('[node') or line.startswith('[connection')) and line.endswith(']\n')
             if start_line != -1 and (" = " in line or new_node):
                 end_line = idx - 1
 
