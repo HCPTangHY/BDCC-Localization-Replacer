@@ -64,11 +64,11 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
                 start = line[0]
                 end = line[1]
                 if is_replacable(item):
-                    new_code += gd_code[prev_end:end]
-                else:
                     translation = item["translation"]
                     translation = translation.replace("__NEWLINE__", "\\n")
                     new_code += gd_code[prev_end:start] + translation
+                else:
+                    new_code += gd_code[prev_end:end]
                 prev_end = end
             new_code += gd_code[prev_end:]
             with open(output_file, "w", encoding="utf-8") as f:
@@ -83,11 +83,11 @@ def replace_translation(source_path: Union[Path, str], translation_path: Union[P
                 start = line[0]
                 end = line[1] + 1
                 if is_replacable(item):
-                    new_tscn_code.extend(tscn_code[prev_end: end])
-                else:
                     translation = item["translation"].replace("\\n", "\n")
                     new_tscn_code.extend(tscn_code[prev_end: start])
                     new_tscn_code.append(translation)
+                else:
+                    new_tscn_code.extend(tscn_code[prev_end: end])
                 prev_end = end
             new_tscn_code.extend(tscn_code[prev_end:])
             
