@@ -192,6 +192,7 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
                 start_line = -1
             if (
                 "text = " in line
+                or "Text = " in line
                 or "Name = " in line
                 or "Description = " in line
                 or "tooltip = " in line
