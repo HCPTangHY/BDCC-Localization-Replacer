@@ -135,6 +135,10 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
                 item["translation"] = item["original"]
                 item["stage"] = 1
                 is_diff = True
+            if item["translation"] == "" and item["original"].startswith("res://"):
+                item["translation"] = item["original"]
+                item["stage"] = 1
+                is_diff = True
         
         with open(new_file, "w", encoding="utf-8") as f:
             json.dump(new_data, f, ensure_ascii=False, indent=2)

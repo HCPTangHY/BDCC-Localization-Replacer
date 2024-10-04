@@ -18,9 +18,7 @@ def extract_string(
             text = node.value
             if expr is None:
                 if node.type == "REGULAR_STRING":
-                    if "://" in text and "https://" not in text:
-                        return {}
-                    elif text == "\" \"":
+                    if text == "\" \"":
                         range = (node.pos_in_stream, node.end_pos)
                     else:
                         range = (node.pos_in_stream + 1, node.end_pos - 1)
