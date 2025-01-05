@@ -107,6 +107,8 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
     if change_path.exists():
         shutil.rmtree(change_path)
     deprecated_path.mkdir(parents=True, exist_ok=True)
+
+    new_files = set([file.as_posix() for file in new_path.glob("**/*.json")])
     
     for file in old_path.glob("**/*.json"):
         if "过时" in file.as_posix():
@@ -117,6 +119,8 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
         if not new_file.exists():
             logger.warning(f"{file} has no corresponding new dict file")
             continue
+        
+        new_files.remove(new_file.as_posix())
 
         with open(file, "r", encoding="utf-8") as f:
             old_data = json.load(f)
@@ -164,6 +168,9 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
                 if not change_file.parent.exists():
                     change_file.parent.mkdir(parents=True)
                 shutil.copyfile(new_file, change_file)
+
+    for file in new_files:
+        shutil.copyfile(file, change_path.joinpath(Path(file).relative_to(new_path)))
 
 if __name__ == "__main__":
     update(DIR_TRANS, DIR_FETCH, DIR_DEPRECATED, DIR_CHANGE)
