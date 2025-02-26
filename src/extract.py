@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 
 from pathlib import Path
@@ -9,6 +10,9 @@ from lark import Tree, Token
 
 from .consts import DIR_SOURCE, DIR_TRANS
 
+STRING_REGEX = re.compile(r".*?\"(.*)\"", re.DOTALL)
+
+
 def extract_string(
     node: Tree, stmt: Tree = None, expr: Tree = None, func: str = ""
 ) -> Dict[Tuple, Dict]:
@@ -18,7 +22,7 @@ def extract_string(
             text = node.value
             if expr is None:
                 if node.type == "REGULAR_STRING":
-                    if text == "\" \"":
+                    if text == '" "':
                         range = (node.pos_in_stream, node.end_pos)
                     else:
                         range = (node.pos_in_stream + 1, node.end_pos - 1)
@@ -35,7 +39,9 @@ def extract_string(
                 context_range = (stmt.line, stmt.end_line)
             if range[1] - range[0] <= 0:
                 return {}
-            return {range: {"range": range, "context_range": context_range, "func": func}}
+            return {
+                range: {"range": range, "context_range": context_range, "func": func}
+            }
         return {}
     if node.data == "getattr":
         call_name = node.children[-1].value
@@ -105,13 +111,12 @@ def extract_string(
     return result
 
 
-
 def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
     if isinstance(source_path, str):
         source_path = Path(source_path)
     if isinstance(result_path, str):
         result_path = Path(result_path)
-        
+
     if result_path.exists():
         shutil.rmtree(result_path)
     result_path.mkdir(parents=True, exist_ok=True)
@@ -154,9 +159,9 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
         if len(result) == 0:
             continue
 
-        target_file: Path = result_path.joinpath(file.relative_to(source_path)).with_suffix(
-            f"{file.suffix}.json"
-        )
+        target_file: Path = result_path.joinpath(
+            file.relative_to(source_path)
+        ).with_suffix(f"{file.suffix}.json")
         target_folder: Path = target_file.parent
         if not target_folder.exists():
             target_folder.mkdir(parents=True)
@@ -165,7 +170,7 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
             json.dump(result, f, indent=2, ensure_ascii=False)
 
     for file in source_path.glob("**/*.tscn"):
-        with open(file, "r", encoding='utf-8') as f:
+        with open(file, "r", encoding="utf-8") as f:
             code = f.readlines()
 
         result = []
@@ -173,17 +178,22 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
         start_line = -1
         node_name = ""
         for idx, line in enumerate(code):
-            new_node = (line.startswith('[node') or line.startswith('[connection')) and line.endswith(']\n')
+            new_node = (
+                line.startswith("[node") or line.startswith("[connection")
+            ) and line.endswith("]\n")
             if start_line != -1 and (" = " in line or new_node):
                 end_line = idx - 1
+
+                original = "".join(code[start_line : end_line + 1])
+                original = re.match(STRING_REGEX, original).group(1)
 
                 result.append(
                     {
                         "key": str((start_line, end_line)),
-                        "original": "".join(code[start_line : end_line + 1]),
+                        "original": original,
                         "translation": "",
                         "stage": 0,
-                        "context": node_name
+                        "context": node_name,
                     }
                 )
 
@@ -195,33 +205,38 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
                 or "Description = " in line
                 or "tooltip = " in line
                 or "title = " in line
-            ):
+            ) and '"' in line:
                 start_line = idx
             if new_node:
                 node_name = line
         if start_line != -1:
             end_line = len(code) - 1
+            original = "".join(code[start_line : end_line + 1]).replace(
+                "\\n", "__NEWLINE__"
+            )
+            original = re.match(STRING_REGEX, original).group(1)
             result.append(
                 {
                     "key": str((start_line, end_line)),
-                    "original": "".join(code[start_line : end_line + 1]).replace("\\n","__NEWLINE__"),
+                    "original": original,
                     "translation": "",
-                    "stage": 0
+                    "stage": 0,
                 }
             )
 
         if len(result) == 0:
             continue
 
-        target_file: Path = result_path.joinpath(file.relative_to(source_path)).with_suffix(
-            f"{file.suffix}.json"
-        )
+        target_file: Path = result_path.joinpath(
+            file.relative_to(source_path)
+        ).with_suffix(f"{file.suffix}.json")
         target_folder: Path = target_file.parent
         if not target_folder.exists():
             target_folder.mkdir(parents=True)
 
         with open(target_file, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2, ensure_ascii=False)
+
 
 if __name__ == "__main__":
     extract(DIR_SOURCE, DIR_TRANS)

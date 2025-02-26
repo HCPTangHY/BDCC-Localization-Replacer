@@ -6,10 +6,11 @@ from typing import Dict, List, Union
 from .log import logger
 from .consts import DIR_TRANS, DIR_FETCH, DIR_DEPRECATED, DIR_CHANGE
 
+
 def update_data(old_data: List, new_data: List) -> Union[List, List]:
     old_data_map: Dict[str, List] = {}
     new_data_map: Dict[str, List] = {}
-    
+
     deprecated_data = []
     is_diff = False
 
@@ -28,7 +29,9 @@ def update_data(old_data: List, new_data: List) -> Union[List, List]:
         new_data_map[original].append(item)
 
     for original, items in old_data_map.items():
-        valid_items = list(filter(lambda x: x["stage"] != 0 and len(x["translation"]) > 0, items))
+        valid_items = list(
+            filter(lambda x: x["stage"] != 0 and len(x["translation"]) > 0, items)
+        )
         if original in new_data_map:
             new_items = new_data_map[original]
             if len(new_data_map[original]) != len(items):
@@ -47,23 +50,28 @@ def update_data(old_data: List, new_data: List) -> Union[List, List]:
         else:
             deprecated_data += valid_items
             is_diff = True
-    
+
     return new_data, deprecated_data, is_diff
 
-def update_deprecated(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_path: Union[Path, str]):
+
+def update_deprecated(
+    new_path: Union[Path, str],
+    old_path: Union[Path, str],
+    deprecated_path: Union[Path, str],
+):
     if isinstance(new_path, str):
         new_path = Path(new_path)
 
     if isinstance(old_path, str):
         old_path = Path(old_path)
-    
+
     if isinstance(deprecated_path, str):
         deprecated_path = Path(deprecated_path)
 
     if deprecated_path.exists():
         shutil.rmtree(deprecated_path)
     deprecated_path.mkdir(parents=True, exist_ok=True)
-    
+
     for file in old_path.glob("**/*.json"):
         if "过时" in file.as_posix():
             continue
@@ -80,11 +88,13 @@ def update_deprecated(new_path: Union[Path, str], old_path: Union[Path, str], de
             new_data = json.load(f)
 
         new_data, deprecated_data, _ = update_data(old_data, new_data)
-        
+
         with open(new_file, "w", encoding="utf-8") as f:
             json.dump(new_data, f, ensure_ascii=False, indent=2)
-        
-        deprecated_file = deprecated_path.joinpath(file.relative_to(old_path).with_suffix(".gd.json"))
+
+        deprecated_file = deprecated_path.joinpath(
+            file.relative_to(old_path).with_suffix(".gd.json")
+        )
 
         if len(deprecated_data) > 0:
             if not deprecated_file.parent.exists():
@@ -92,16 +102,22 @@ def update_deprecated(new_path: Union[Path, str], old_path: Union[Path, str], de
             with open(deprecated_file, "w", encoding="utf-8") as f:
                 json.dump(deprecated_data, f, ensure_ascii=False, indent=2)
 
-def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_path: Union[Path, str], change_path: Union[Path, str]):
+
+def update(
+    new_path: Union[Path, str],
+    old_path: Union[Path, str],
+    deprecated_path: Union[Path, str],
+    change_path: Union[Path, str],
+):
     if isinstance(new_path, str):
         new_path = Path(new_path)
 
     if isinstance(old_path, str):
         old_path = Path(old_path)
-        
+
     if isinstance(deprecated_path, str):
         deprecated_path = Path(deprecated_path)
-    
+
     if deprecated_path.exists():
         shutil.rmtree(deprecated_path)
     if change_path.exists():
@@ -109,7 +125,7 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
     deprecated_path.mkdir(parents=True, exist_ok=True)
 
     new_files = set([file.as_posix() for file in new_path.glob("**/*.json")])
-    
+
     for file in old_path.glob("**/*.json"):
         if "过时" in file.as_posix():
             continue
@@ -119,14 +135,14 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
         if not new_file.exists():
             logger.warning(f"{file} has no corresponding new dict file")
             continue
-        
+
         new_files.remove(new_file.as_posix())
 
         with open(file, "r", encoding="utf-8") as f:
             old_data = json.load(f)
         with open(new_file, "r", encoding="utf-8") as f:
             new_data = json.load(f)
-        
+
         for item in old_data:
             item["original"] = item["original"].replace("\\n", "\n")
             item["translation"] = item["translation"].replace("\\n", "\n")
@@ -135,7 +151,12 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
 
         # put original text for text with '_'
         for item in new_data:
-            if item["translation"] == "" and "_" in item["original"] and "say=" not in item["original"] and "__NEWLINE__" not in item["original"]:
+            if (
+                item["translation"] == ""
+                and "_" in item["original"]
+                and "say=" not in item["original"]
+                and "__NEWLINE__" not in item["original"]
+            ):
                 item["translation"] = item["original"]
                 item["stage"] = 1
                 is_diff = True
@@ -143,13 +164,13 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
                 item["translation"] = item["original"]
                 item["stage"] = 1
                 is_diff = True
-        
+
         with open(new_file, "w", encoding="utf-8") as f:
             json.dump(new_data, f, ensure_ascii=False, indent=2)
-        
+
         deprecated_file = deprecated_path.joinpath(file.relative_to(old_path))
         change_file = change_path.joinpath(file.relative_to(old_path))
-        
+
         if len(deprecated_data) > 0:
             if not deprecated_file.parent.exists():
                 deprecated_file.parent.mkdir(parents=True)
@@ -171,6 +192,7 @@ def update(new_path: Union[Path, str], old_path: Union[Path, str], deprecated_pa
 
     for file in new_files:
         shutil.copyfile(file, change_path.joinpath(Path(file).relative_to(new_path)))
+
 
 if __name__ == "__main__":
     update(DIR_TRANS, DIR_FETCH, DIR_DEPRECATED, DIR_CHANGE)
