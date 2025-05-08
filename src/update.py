@@ -191,7 +191,10 @@ def update(
                 shutil.copyfile(new_file, change_file)
 
     for file in new_files:
-        shutil.copyfile(file, change_path.joinpath(Path(file).relative_to(new_path)))
+        change_file = change_path.joinpath(Path(file).relative_to(new_path))
+        if not change_file.parent.exists():
+            change_file.parent.mkdir(parents=True)
+        shutil.copyfile(file, change_file)
 
 
 if __name__ == "__main__":
