@@ -133,7 +133,12 @@ def update(
         new_file = new_path.joinpath(file.relative_to(old_path))
 
         if not new_file.exists():
+            print(f"{file} has no corresponding new dict file")
             logger.warning(f"{file} has no corresponding new dict file")
+            deprecated_file = deprecated_path.joinpath(file.relative_to(old_path))
+            if not deprecated_file.parent.exists():
+                deprecated_file.parent.mkdir(parents=True)
+            shutil.copy(file, deprecated_file)
             continue
 
         new_files.remove(new_file.as_posix())
