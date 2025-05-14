@@ -3,7 +3,7 @@ from src import replacer, log
 from src.extract import extract
 from src.replace import replace_translation
 from src.update import update, update_deprecated
-from src.parse import parser_check
+from src.parse import lint_check
 from src.consts import (
     DIR_SOURCE,
     DIR_OUTPUT,
@@ -30,7 +30,7 @@ def translate_new():
     log.logger.info("Replace source code with new translation items...")
     replace_translation(DIR_SOURCE, DIR_TRANS, DIR_OUTPUT)
     log.logger.info("Checking translation files...")
-    parser_check(DIR_OUTPUT)
+    lint_check(DIR_OUTPUT)
     log.logger.info("Translation complete!")
 
 

@@ -2,9 +2,10 @@ from pathlib import Path
 from typing import Dict, Tuple, Union
 from .log import logger
 
-from gdtoolkit.parser import parser
+from gdtoolkit.linter import lint_code
+from lark.exceptions import UnexpectedInput
 
-def parser_check(output_path: Union[Path, str]):
+def lint_check(output_path: Union[Path, str]):
     if isinstance(output_path, str):
         output_path = Path(output_path)
 
@@ -14,12 +15,15 @@ def parser_check(output_path: Union[Path, str]):
             code = f.read()
 
         try:
-            parser.parse(code)
-        except Exception as e:
+            lint_code(code)
+        except UnexpectedInput as e:
             is_error = True
-            logger.error(f"{file} parse error: {e}")
+            logger.error(f"{file}\nContext:\n{e.get_context(code)}\nparse error: {e}")
 
     if is_error:
         raise Exception("parse error")
     else:
         logger.info("parse success")
+
+if __name__ == "__main__":
+    pass
