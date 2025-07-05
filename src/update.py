@@ -48,7 +48,11 @@ def update_data(old_data: List, new_data: List) -> Union[List, List]:
                     new_items[idx]["translation"] = item["translation"]
                     new_items[idx]["stage"] = item["stage"]
         else:
-            deprecated_data += valid_items
+            for item in valid_items:
+                if item["translation"] == item["original"]:
+                    continue
+                item["stage"] = 9
+                deprecated_data.append(item)
             is_diff = True
 
     return new_data, deprecated_data, is_diff
