@@ -45,12 +45,16 @@ def replace_translation(
 
     shutil.copytree(source_path, output_path)
 
+    # font replacement
     shutil.copyfile(
         ROOT / "SourceHanSansCN-Regular.otf",
         output_path / "Fonts" / "Titillium-Regular.otf",
     )
     shutil.copyfile(
         ROOT / "SourceHanSansCN-Bold.otf", output_path / "Fonts" / "Titillium-Bold.otf"
+    )
+    shutil.copyfile(
+        ROOT / "Bailu_Qiaoli.ttf", output_path/ "Fonts" / "Chocolate Covered Raindrops BOLD.ttf"
     )
 
     for file in translation_path.glob("**/*.json"):
