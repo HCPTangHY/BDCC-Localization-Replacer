@@ -110,7 +110,7 @@ def replace_translation(
             new_tscn_code = "".join(new_tscn_code)
 
             # the italic Chinese charactes do not display in Godot 3.5
-            if source_file.stem == "GameUI":
+            if source_file.stem.startswith("GameUI"):
                 # get bold font
                 bold_font = re.search(BOLD_RE, new_tscn_code)
                 # replace bold_italic and regular_italic with bold_font
