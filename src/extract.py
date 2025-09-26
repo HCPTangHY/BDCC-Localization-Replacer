@@ -205,7 +205,8 @@ def extract(source_path: Union[Path, str], result_path: Union[Path, str]):
                 or "Description = " in line
                 or "tooltip = " in line
                 or "title = " in line
-                or "Message = " in line
+                or "Message= " in line
+                or "Desc= " in line
             ) and '"' in line:
                 start_line = idx
             if new_node:
