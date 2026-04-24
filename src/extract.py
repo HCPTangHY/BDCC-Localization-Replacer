@@ -91,6 +91,13 @@ def extract_string(
             # split when too long
             in_expr = None
             in_stmt = "no context"
+    elif node.data == "dict":
+        if len(node.children) <= 9:
+            in_expr = node
+        else:
+            # split when too long
+            in_expr = None
+            in_stmt = "no context"
     elif node.data == "subscr_expr":
         return {}
     else:
