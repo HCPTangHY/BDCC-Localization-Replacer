@@ -52,7 +52,7 @@ def extract_string(
             "Color",
             "preload",
             "load",
-            "playAnimation"
+            "playAnimation",
         ]:
             return {}
     elif node.data == "standalone_call" or node.data == "getattr_call":
@@ -69,6 +69,7 @@ def extract_string(
             "Color",
             "preload",
             "load",
+            "playAnimation",
         ]:
             return {}
         elif call_name == "emit_signal":
