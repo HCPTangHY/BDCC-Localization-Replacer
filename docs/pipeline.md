@@ -86,9 +86,23 @@ cd E:\Projects\Games\BDCC\BDCCChineseLocalization
 git submodule update --remote
 ```
 
-`pipeline.sh` 第一行 `git submodule update --remote` 会做掉第 2 步（子模块 url 已指向 fork 的 `chinese` 分支）。
+`pipeline.sh` 的前两步就是上面这两条，并额外做下一步。
 
-**同步后必须检查 `source/` 是否与 fork 一致**，否则提取的是旧源码：
+### 3.1 把子模块工作树拉回与远程一致（必须先做）
+
+`git submodule update --remote` 只移动指针，**不会清掉子模块里的脏文件**。而 Godot（.NET）打开过项目就会自动改 `.import`、`.tres`、`project.godot`（`[mono] assembly_name`）等，这些改动会被当成源码提取，实测产生过「原文是中文」的词条。所以提取前必须：
+
+```bash
+cd E:\Projects\Games\BDCC\BDCCChineseLocalization
+git submodule update --init --recursive --remote
+git -C BDCC fetch --quiet origin
+git -C BDCC reset --hard origin/chinese     # 分支名可用 SUBMODULE_BRANCH 覆盖
+git -C BDCC status --porcelain              # 必须为空，否则停下处理
+```
+
+注意：`reset --hard` 会丢弃 BDCC 工作树里**所有**未提交改动。汉化侧需要的代码补丁（字体、场景、版本号占位符等）必须提交在 `chinese` 分支上，不能只留在工作树里，否则这一步会把它清掉。
+
+**同步后检查 `source/` 是否与 fork 一致**，否则提取的是旧源码：
 
 ```bash
 cd E:\Projects\Games\BDCC
@@ -216,7 +230,7 @@ CI（`.github/workflows/runner.yml`）：
 
 ## 9. 坑与检查清单
 
-- **`BDCC` 工作树里的改动基本都是 Godot（.NET）打开编辑器自动产生的**：`.import`、`.mono/`、`project.godot` 的 `[mono] assembly_name`、`.tres` 重写等，不用提交，也不必当成源码污染。真正要盯的是**文本改动**：实测 `UI/LaunchScreen/LaunchScreen.tscn` 多出一行 `window_title = "请确认..."`，会被提取成「原文是中文」的新词条；`git checkout -- <file>` 撤销后 `change/` 从 2 个文件降到 1 个。上传前 `git -C BDCC status --porcelain` 过一遍，遇到非 Godot 产物的文本改动先 revert 再重跑。
+- **`BDCC` 工作树里的改动基本都是 Godot（.NET）打开编辑器自动产生的**：`.import`、`.mono/`、`project.godot` 的 `[mono] assembly_name`、`.tres` 重写等，不用提交，也不必当成源码污染——但**提取前要按 3.1 节把它们清掉**（`reset --hard origin/chinese` + `status --porcelain` 必须为空）。真正要盯的是文本改动：实测 `UI/LaunchScreen/LaunchScreen.tscn` 曾多出一行 `window_title = "请确认..."`，会被提取成「原文是中文」的新词条；撤销后 `change/` 从 2 个文件降到 1 个。
 - **`fetch/` 必须是最新导出**。用手工留存的旧 zip 当基线，`change/` 会虚高（实测旧基线 190 个文件 → 换最新导出后只剩 2 个）。
 - **`fetch` 有、`trans` 没文件的条目会整文件进 `deprecated/`**，多数是源码删文件，也可能是该文件已无可提取文本——上传前人工看一眼。
 - **不要用 `key` 做主键或增量依据**：位置型，每次提取都变；只按 `original` 对齐。
