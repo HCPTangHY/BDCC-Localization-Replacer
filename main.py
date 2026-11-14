@@ -4,6 +4,7 @@ from src.extract import extract
 from src.replace import replace_translation
 from src.update import update, update_deprecated
 from src.parse import lint_check
+from src.check_identifier import check_identifier
 from src.consts import (
     DIR_SOURCE,
     DIR_OUTPUT,
@@ -27,6 +28,8 @@ def translate_new():
     extract(DIR_SOURCE, DIR_TRANS)
     log.logger.info("Migrate old translation items...")
     update(DIR_TRANS, DIR_FETCH, DIR_DEPRECATED, DIR_CHANGE)
+    log.logger.info("Checking identifier-like entries...")
+    check_identifier(DIR_TRANS)
     log.logger.info("Replace source code with new translation items...")
     replace_translation(DIR_SOURCE, DIR_TRANS, DIR_OUTPUT)
     log.logger.info("Checking translation files...")
@@ -39,6 +42,8 @@ def translate_old():
     extract(DIR_SOURCE, DIR_TRANS)
     log.logger.info("Migrate old translation items...")
     update_deprecated(DIR_TRANS, DIR_FETCH, DIR_DEPRECATED)
+    log.logger.info("Checking identifier-like entries...")
+    check_identifier(DIR_TRANS)
     log.logger.info("Replace source code with new translation items...")
     replace_translation(DIR_SOURCE, DIR_TRANS, DIR_OUTPUT)
 

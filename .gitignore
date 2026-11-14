@@ -12,3 +12,9 @@ transoutput
 *.exe
 *.import
 *.png
+
+output/
+raw/
+source/
+check/
+.venv/
