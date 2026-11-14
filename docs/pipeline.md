@@ -216,7 +216,7 @@ CI（`.github/workflows/runner.yml`）：
 
 ## 9. 坑与检查清单
 
-- **`source/` 必须是干净的 fork 检出**。工作树里未提交的本地改动会被当成「新词条」提取：实测 `UI/LaunchScreen/LaunchScreen.tscn` 残留 `window_title = "请确认..."`（`git blame` 显示 Not Committed Yet），直接产出一条中文原文进 `change/`。上传前先 `git -C BDCC status --porcelain` 过一遍，`.import` 之外的非预期改动一律 revert。
+- **`BDCC` 工作树里的改动基本都是 Godot（.NET）打开编辑器自动产生的**：`.import`、`.mono/`、`project.godot` 的 `[mono] assembly_name`、`.tres` 重写等，不用提交，也不必当成源码污染。真正要盯的是**文本改动**：实测 `UI/LaunchScreen/LaunchScreen.tscn` 多出一行 `window_title = "请确认..."`，会被提取成「原文是中文」的新词条；`git checkout -- <file>` 撤销后 `change/` 从 2 个文件降到 1 个。上传前 `git -C BDCC status --porcelain` 过一遍，遇到非 Godot 产物的文本改动先 revert 再重跑。
 - **`fetch/` 必须是最新导出**。用手工留存的旧 zip 当基线，`change/` 会虚高（实测旧基线 190 个文件 → 换最新导出后只剩 2 个）。
 - **`fetch` 有、`trans` 没文件的条目会整文件进 `deprecated/`**，多数是源码删文件，也可能是该文件已无可提取文本——上传前人工看一眼。
 - **不要用 `key` 做主键或增量依据**：位置型，每次提取都变；只按 `original` 对齐。
@@ -236,10 +236,10 @@ CI（`.github/workflows/runner.yml`）：
 | 准备 `source/` | 3300 `.gd` + 653 `.tscn`（robocopy /MIR，排除 `.git`） | 58 s |
 | 准备 `fetch/` | `generate_artifact` + `download_artifact` → 3821 个 json（415 在 `过时/`），32.8 MB | ~60 s |
 | `extract` | `trans/` 3406 文件 / 174,341 词条 | 62.9 s |
-| `update` | `change/` 2 文件（新增词条 1 条）、`deprecated/` 1 文件（`stage=9` 1 条）、已译 174,258 条 | 57.1 s |
+| `update` | `change/` 2 文件（新增 1 条，来自本地误改）、`deprecated/` 1 文件（`stage=9` 1 条）、已译 174,258 条 | 57.1 s |
+| `update`（撤销误改后重跑） | `change/` **1 文件**（新增 0 条，仅条目数变化）、`deprecated/` 1 文件（1 条） | 100.4 s |
 | `check_identifier` | 标识符形态 31,428 条，已译 31,426 条，译文≠原文 151 条 | 31.7 s |
 
-结论：源码与项目词条已基本同步（只剩 2 个文件的差异），本项目这一轮**几乎没有要上传的新词条**；
-`change/` 里的 `UI/LaunchScreen/LaunchScreen.tscn` 差异来自上面提到的本地未提交改动，应先 revert 再上传。
+结论：源码与项目已基本同步——撤销那条误改后只剩 `Game/Datapacks/UI/CrotchCode/VisualSlots/CrotchBigTextEditWindow.gd.json` 一个文件有差异（条目数变化、新增 0 条），本轮**没有要上传的新词条**。
 
 Paratranz 侧现状（`get_project`）：3821 文件 / 177,115 词条 / 已译 176,846 / `extra.version = 0.3.2`。
