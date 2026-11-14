@@ -225,7 +225,7 @@ bash pipeline.sh
 
 CI（`.github/workflows/runner.yml`）：
 
-- 触发：`schedule`（`30 0/6 * * *` 每 6 小时 + `30 12 * * 1` 每周一）、`workflow_dispatch`、推送 `v*` tag；
+- 触发：`schedule`（每周一 `30 12 * * 1`；每 6 小时的 `30 0/6 * * *` 已在 `afa98b1` 注释掉）、`workflow_dispatch`、推送 `v*` tag；
 - `translate`（windows-latest，dotnet 8 + Python 3.11）→ 五个 Godot 3.6 构建 job（Windows / Linux / MacOS / Web(可失败) / Android）→ `release`；
 - 发布：定时/手动 → 预发布 `tag: bdcc.YY.MM.DD`；`v*` tag → 正式版，release note 由 `marko` 从 `README.md` 最后一段列表抽最新条目生成，并触发 Jekyll 发布页。
 
