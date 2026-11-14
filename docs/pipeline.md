@@ -208,13 +208,18 @@ lint_check(DIR_OUTPUT)"
 - `replace_translation`：整树拷贝 `source/ → output/`，按 `key` 拼接译文；`.tscn` 用原文子串替换；`GameUI*` 的斜体字体统一改指粗体（Godot 3.5 中文斜体不显示）；字体文件替换为 `SourceHanSansCN-Regular/Bold.otf → Titillium-Regular/Bold.otf`、`Bailu_Qiaoli.ttf → Chocolate Covered Raindrops BOLD.ttf`。
 - `lint_check`：gdtoolkit 对每个 `.gd` 做语法校验，`UnexpectedInput` 直接抛异常——**宁可不发版，也不发起不来的包**。
 
-一键（本地等价于 CI 的 translate 阶段）：
+一键跑完整条（本地等价于 CI 的 translate 阶段，**不含上传**）：
 
 ```bash
 cd BDCCChineseLocalization
-export PARATRANZ_TOKEN=xxx
-bash pipeline.sh            # = git submodule update --remote + dotnet run ... -- Translate $PARATRANZ_TOKEN ${PARATRANZ_PROJECT:-10958} -v $TRANSLATION_VERSION
+export PARATRANZ_TOKEN=xxx     # 必填，脚本会校验
+# 可选: PARATRANZ_PROJECT(默认 10958)、TRANSLATION_VERSION(默认 1.0.0)、SUBMODULE_BRANCH(默认 chinese)、PYTHON
+bash pipeline.sh
 ```
+
+`pipeline.sh` 四步：① `git submodule update --init --recursive --remote`；② `BDCC` 执行 `reset --hard origin/chinese` 并校验工作树干净（`.mono/ .import/ .godot/` 除外）；③ 挑 Python 解释器——子模块里有 `BDCC-Localization-Replacer/.venv` 就用它（用 `cygpath -w` 转成 Windows 原生路径，.NET 起进程认不了 `/e/...`），否则用 `$PYTHON` / 系统 `python`；④ `dotnet run … -- Translate`。
+
+本地前提：子模块里的 `.venv` 要先建好并装依赖（`python -m venv .venv && .venv/Scripts/python.exe -m pip install -r requirements.txt`）；CI 里是 `pip install -r requirements.txt` 装到系统 python。
 
 `Program.cs Translate` 做的事：删/重建 `Artifact/` → 下载导出包 → 解到 `Artifact/utf8` → 拷成工具侧 `fetch/`、拷 `BDCC` 成 `source/` → `python main.py` → 把 `output/UI/MainMenu/MainMenu.gd` 里的 `TRANSLATION_VERSION_HERE` 换成 `-v` 版本 → 压 `BdccChineseLocalization.zip`。
 
@@ -234,7 +239,7 @@ CI（`.github/workflows/runner.yml`）：
 - **`fetch/` 必须是最新导出**。用手工留存的旧 zip 当基线，`change/` 会虚高（实测旧基线 190 个文件 → 换最新导出后只剩 2 个）。
 - **`fetch` 有、`trans` 没文件的条目会整文件进 `deprecated/`**，多数是源码删文件，也可能是该文件已无可提取文本——上传前人工看一眼。
 - **不要用 `key` 做主键或增量依据**：位置型，每次提取都变；只按 `original` 对齐。
-- **`TRANSLATION_VERSION_HERE` 不在上游源码里**，是汉化侧在打包前加的。要确认注入点（`src/replace.py` 之后、压缩 `output/` 之前）确实把它写进了 `output/UI/MainMenu/MainMenu.gd`，否则 `Program.cs` 的替换是空操作、游戏里不显示汉化号。目前 `src/replace.py` 没有这段逻辑。
+- **版本号占位符在译文里，不在源码里**：原文 `"Version: "+GlobalRegistry.getGameVersionString()` 在 Paratranz 的译文是 `"版本：TRANSLATION_VERSION_HERE"`（`stage=1`），`replace_translation` 写进 `output/` 后由 `Program.cs` 把这个字面量换成 `-v` 传入的版本。因此 **`-v` 必须传真实版本号**；不传（默认 `1.0.0`）包里就会写死 `1.0.0`，漏替换时则会出现字面量 `TRANSLATION_VERSION_HERE`。验证方式：`grep -n versionLabel.text output/UI/MainMenu/MainMenu.gd`。
 - **Token 只从环境变量取**；历史上 `pipeline.sh` 明文提交过 token，应视为已泄露并在 Paratranz 侧轮换。
 - **工具改动要回推子模块指针**：`BDCC-Localization-Replacer` 提交并推送后，发布库要 `git add BDCC-Localization-Replacer` 更新 commit，否则 CI 跑的还是旧代码。
 - **本地跑完的 `output/` 不要打包上传**：若 `source/` 里混了 `.git` 会让 zip 暴涨（CI 里是文件不是目录，所以 CI 没这问题）。
@@ -253,6 +258,7 @@ CI（`.github/workflows/runner.yml`）：
 | `update` | `change/` 2 文件（新增 1 条，来自本地误改）、`deprecated/` 1 文件（`stage=9` 1 条）、已译 174,258 条 | 57.1 s |
 | `update`（撤销误改后重跑） | `change/` **1 文件**（新增 0 条，仅条目数变化）、`deprecated/` 1 文件（1 条） | 100.4 s |
 | `check_identifier` | 标识符形态 31,428 条，已译 31,426 条，译文≠原文 151 条 | 31.7 s |
+| 整条 `pipeline.sh` | 成功：`BdccChineseLocalization.zip` 244,575,910 B / 9818 文件，`change/` 1 文件，`deprecated/` 1 文件，lint `parse success` | replace 101 s、lint 86 s、zip ≈1 min |
 
 结论：源码与项目已基本同步——撤销那条误改后只剩 `Game/Datapacks/UI/CrotchCode/VisualSlots/CrotchBigTextEditWindow.gd.json` 一个文件有差异（条目数变化、新增 0 条），本轮**没有要上传的新词条**。
 
