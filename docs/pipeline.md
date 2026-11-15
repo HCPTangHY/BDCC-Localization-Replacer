@@ -214,6 +214,27 @@ update_file(project_id=10958, file_id=<过时/ 下该文件的 id>,
 
 本轮 0.4.0 的 `deprecated/`：42 个文件（1 个整文件拷贝 + 41 个含 `stage=9` 的部分词条），共 147 条 `stage=9`。
 
+### 7.2 回填译文：`trans/` → `upload_file_translation`
+
+**只传 `change/` 是不够的。** 项目的词条 `key` 就是工具输出的位置型 key（导出包首条即 `"(46, 59)"`，与我们 `trans/` 完全一致），源码一动 key 就变：`update_file` 只把新 key 的原文写进去，这些词条在项目里会显示为**未翻译**——而我们的 `trans/` 里其实已经带着迁移好的译文。
+
+所以 `change/` 传完之后，还要把译文回填一次：
+
+```text
+upload_file_translation(project_id=10958, file_id=<同上映射>,
+                        file_path="trans/<相对路径>.json",
+                        force=False)
+```
+
+- `force=False`（默认）只覆盖**未被人工编辑过**的词条，不会冲掉译者/审校的成果；
+- 传的对象是 `trans/`（含迁移过来的译文与自动填充的标识符条目），不是 `change/`；
+- 顺序不能反：先 `update_file` 建出新 key，再 `upload_file_translation` 才匹配得上；
+- 需要回填的判定：`trans/` 与 `fetch/` 在 `key` / `translation` / `stage` 上有差异的文件（0.4.0 实测 394 个文件有差异，其中 **231 个**有非空译文可推）。
+
+`incremental=True` 的代价要清楚：`update_file` 不删旧 key，所以项目里会累积上一版本的位置型词条；这些残留不影响构建（构建只认本次 `trans/`），但会让项目词条数虚高。要清理只能另做一次显式整理，**不要**在常规上传里把 `incremental` 改成 `false` 一把删——那会连带删掉译者挂在旧 key 上的译文。
+
+0.4.0 实测回填量：新增 key 且带译文 **19,478 条**，译文文本变化 48 条，仅状态变化 9 条。
+
 ---
 
 ## 8. 替换、校验、打包、发版
