@@ -191,6 +191,23 @@ PYTHONPATH= ./.venv/Scripts/python.exe -c "from src.check_identifier import chec
 
 项目内的文件命名与工具产物一致（`UI/MainMenu/MainMenu.gd.json` / `*.tscn.json`），过时词条放在项目 `过时/` 目录。
 
+### 7.1 `deprecated/` → 项目 `过时/` 目录（只增不覆盖）
+
+`deprecated/` 是「源码里已不存在、但线上有译文」的词条（`stage=9`），归档到项目的 `过时/` 下，路径保持与导出包一致：`deprecated/UI/MainMenu/MainMenu.gd.json` → `过时/UI/MainMenu/MainMenu.gd.json`。
+
+**硬规则：绝不覆盖 `过时/` 里已有的文件或词条。**
+
+1. 先 `list_files(10958)` 取当前路径集合（含 `过时/` 下的）；
+2. `过时/<相对路径>` **不存在** → `create_file(project_id=10958, path="过时/<目录>/", file_path=<deprecated 里的本地 json>)`；
+3. `过时/<相对路径>` **已存在** → 不调用 `update_file`、不覆盖，改用带日期的文件名**另建**一个：`<原名>.<YYYYMMDD>.json`（如 `MainMenu.gd.20261114.json`）；该名字也存在时追加序号 `-2`、`-3`；
+4. 禁止对 `过时/` 内文件做 `update_file`（会替换原文、冲掉归档）、删除或移动。
+
+`deprecated/` 里的条目带着原有译文和 `stage=9`，作用是存档「已下线文本」；`src/update.py` 在后续运行时跳过路径含「过时」的文件，因此归档不会回流进 `fetch/`、也不会被当成本次提取结果。
+
+上传顺序：先 `change/`（`update_file` / `create_file`），再 `deprecated/` 归档，最后再考虑更新项目 `extra.version`。归档这一步**只增不删**，多传不会破坏任何东西，漏传只会少一份存档。
+
+本轮 0.4.0 的 `deprecated/`：42 个文件（1 个整文件拷贝 + 41 个含 `stage=9` 的部分词条），共 147 条 `stage=9`。
+
 ---
 
 ## 8. 替换、校验、打包、发版
