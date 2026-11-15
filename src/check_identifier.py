@@ -1,20 +1,30 @@
-"""检查翻译词条中的疑似代码标识符。
+"""检查翻译词条中可能破坏代码的译文。
 
-提取出的词条偶尔会是单个单词，但实际上是多个单词拼合而成的标识符
-（PascalCase 如 AbcAbc / DevTools、camelCase 如 abcAbc / lineIndex、
-snake_case 如 Abc_abc / after_sex、kebab-case 如 high-security），
-这类内容很可能不应被翻译（id、类名、枚举值、标签等）。
+提取出的词条偶尔是代码里的字面量而不是给人看的文本：id、类名、枚举值、
+资源路径、状态机状态名等。这类内容一旦被翻译，游戏里就会出现「分支永不命中」
+「物品查不到」「场景加载失败」这类静默故障。
 
-本模块扫描翻译词条目录，把所有「原文为标识符形态、且译文与原文不一致」
-的词条输出到控制台，并生成一份文本报告，便于人工查证后决定是否回退。
+判定分两层：
+
+1. **形状筛选**（`is_identifier_like`）：原文像标识符或资源路径。只用来收窄
+   「待人工」一档的噪音，不作为结论。PascalCase 如 `DevTools`、camelCase 如
+   `lineIndex`、snake_case 如 `after_sex`、kebab-case 如 `high-security`
+   （后者仅当段内出现数字/内部驼峰，或匹配 `zh-CN` 这类语言代码时才收）。
+2. **sink 判定**（`classify_sink`）：在源码行里看字面量**左侧的落点**——
+   `id=` / `sceneID=` 赋值、`== "…"` 比较、`hasItemID(` 之类的函数实参
+   判为 danger；`text=` / `roomName` / `addButton(` / `getName()` 返回
+   判为 safe（只统计，不告警）；其余判为 unknown（保留人工核查）。
+
+报告分四节：必须回退（danger 且 stage=1）、待确认（danger 但 stage≠1）、
+空白污染（译文与原文只差空白）、待人工（形状像标识符但 sink 未识别）。
 """
 
 import json
 import re
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
-from .consts import DIR_CHECK, DIR_TRANS
+from .consts import DIR_CHECK, DIR_SOURCE, DIR_TRANS
 from .log import logger
 
 #: PascalCase：大写字母开头，如 AbcAbc / DevTools / HTTPResponse
@@ -25,6 +35,64 @@ CAMEL_RE = re.compile(r"^[a-z][A-Za-z0-9]*$")
 SNAKE_RE = re.compile(r"^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+$")
 #: kebab-case：连字符分隔，如 high-security / some-tag
 KEBAB_RE = re.compile(r"^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+$")
+#: kebab 段内的代码特征：数字或内部驼峰（WoodenHorseIdle-loop / face-fuck2）
+KEBAB_CODE_SEG_RE = re.compile(r"\d|[a-z][A-Z]")
+#: 语言/区域代码，如 zh-CN / zh-Hans / pt-BR
+LOCALE_RE = re.compile(r"^[a-z]{2,3}-(?:[A-Z]{2}|[A-Z][a-z]{3})$")
+#: 字体资源路径：中文包会故意把它们换成中文字体，不算误译
+FONT_PATH_RE = re.compile(r"res://.*\.(?:otf|ttf|woff2?)$", re.I)
+#: 资源路径：翻译必然破坏加载
+RES_PATH_RE = re.compile(r"res://")
+
+#: 赋值目标是这些名字时，字面量是代码里的标识
+DANGER_TARGET_RE = re.compile(
+    r"(?i)^("
+    r"tag|key|group|groups|animation|animation_name|current_animation|"
+    r"path|resource|state|action|mode|slot|fluid|type_code"
+    r")$"
+)
+#: 标识形态的目标名后缀（**区分大小写**）：camelCase 写 `ID`，snake 写 `_id`
+DANGER_ID_SUFFIX_RE = re.compile(r"(?:ID|_id)$|^id$")
+#: 赋值目标是这些文本属性时，翻译是安全的
+SAFE_TARGET_RE = re.compile(
+    r"(?i)^("
+    r"text|bbcode_text|tooltip_text|hint_tooltip|label|title|description|desc|"
+    r"room_name|roomname|room_description|roomdescription|show_name|showname|"
+    r"name|message|msg|prompt|help_text|helptext|note|body"
+    r")$"
+)
+#: 这些函数的实参是 id / 路径 / 节点名，翻译会断
+DANGER_CALL_RE = re.compile(
+    r"(?i)^("
+    r"hasitemid|createitem|getitem|getitemid|"
+    r"getnode|hasnode|findnode|"
+    r"isingroup|addtogroup|removefromgroup|getnodesingroup|"
+    r"load|preload|setmeta|hasmeta|getmeta|hasmethod|"
+    r"call|connect|emitsignal|travel|play|getevent|addtrigger|adduniquetrigger"
+    r")$"
+)
+#: 这些函数的实参是给人看的文案
+SAFE_CALL_RE = re.compile(
+    r"(?i)^("
+    r"addbutton|adddisabledbutton|addbuttonwithchecks|addbuttonwithcheck|"
+    r"say|sayn|saynn|addtext|settext|setdeferred|"
+    r"print|printerr|pusherror|pushwarning|tr|format|addline|"
+    r"bbcode|appendbbcode"
+    r")$"
+)
+#: 返回值落点：函数名像「取显示文本」时，翻译安全
+SAFE_FUNC_RE = re.compile(
+    r"(?i)^_?(get|_)?("
+    r"name|officialname|displayname|visiblename|pillname|effectname|"
+    r"status|textforlevel|desc|description|buttondesc|butt\w*|lewd\w*|"
+    r"title|label|prompt|message|tooltip|info|rank\w*|adjective\w*"
+    r")"
+)
+
+#: sink 档位
+DANGER = "danger"
+SAFE = "safe"
+UNKNOWN = "unknown"
 
 
 def is_identifier_like(text: str) -> bool:
@@ -38,6 +106,8 @@ def is_identifier_like(text: str) -> bool:
     # 多行字符串占位符，不是标识符
     if "__NEWLINE__" in text:
         return False
+    if RES_PATH_RE.search(text):
+        return not FONT_PATH_RE.search(text)
     if PASCAL_RE.match(text):
         # 大写开头，且内部大小写混合（至少两个大写字母、且大写后跟小写），
         # 排除 Health 这类单个大写开头的普通单词
@@ -50,85 +120,341 @@ def is_identifier_like(text: str) -> bool:
     if SNAKE_RE.match(text):
         return True
     if KEBAB_RE.match(text):
-        return True
+        # GDScript 里 `-` 是减号，连字符串几乎全是显示文本
+        # （high-security / Bio-lab / Face-fucking）；只有段内带数字、
+        # 内部驼峰（WoodenHorseIdle-loop）或语言代码（zh-CN）才收
+        if LOCALE_RE.match(text):
+            return True
+        return any(KEBAB_CODE_SEG_RE.search(seg) for seg in text.split("-"))
     return False
+
+
+def _literal_head(text: str, size: int = 40) -> str:
+    """取原文首行前若干字符，用于在源码行里定位字面量。"""
+    return text.split("\n")[0][:size]
+
+
+def _find_literal_index(line: str, original: str) -> int:
+    """在源码行里定位字面量的起始引号位置，找不到返回 -1。"""
+    head = _literal_head(original)
+    for quote in ('"', "'"):
+        idx = line.find(f"{quote}{head}")
+        if idx >= 0:
+            return idx
+    return -1
+
+
+def _last_segment(target: str) -> str:
+    """取赋值目标最后一段标识符，如 `a.b["c"].text` -> `text`。
+
+    先剔除字符串字面量与方括号下标，`notFit[slaveID]` 取到的是 `notFit`
+    而不是下标里的 `slaveID`。
+    """
+    cleaned = re.sub(r"\"[^\"]*\"|'[^']*'|\[[^\]]*\]", "", target)
+    words = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", cleaned)
+    return words[-1] if words else ""
+
+
+def _is_danger_target(target: str) -> bool:
+    """赋值目标是否意味着「这是代码里的标识」。"""
+    if not target:
+        return False
+    if DANGER_TARGET_RE.match(target):
+        return True
+    return bool(DANGER_ID_SUFFIX_RE.search(target))
+
+
+def classify_sink(line: str, original: str, func_name: str = "") -> Tuple[str, str]:
+    """按字面量左侧的落点判断翻译是否安全。
+
+    返回 `(档位, sink 说明)`，档位取 `danger` / `safe` / `unknown`。
+    """
+    if FONT_PATH_RE.search(original):
+        return SAFE, "font"
+    idx = _find_literal_index(line, original)
+    left = (line[:idx] if idx >= 0 else line).rstrip()
+    # 列表里的字面量：去掉包住它的方括号/逗号再看左侧（不要吃函数左括号）
+    while left.endswith(("[", ",")):
+        left = left[:-1].rstrip()
+    window = left[-60:]
+
+    # 与字面量做比较：状态机、枚举、配置键
+    if re.search(r"(?:==|!=|\bin)\s*$", window):
+        return DANGER, "compare"
+
+    # 赋值：看目标名
+    match = re.search(r"(?::=|=)\s*$", window)
+    if match:
+        target = _last_segment(window[: match.start()])
+        if _is_danger_target(target):
+            return DANGER, f"assign:{target}"
+        if SAFE_TARGET_RE.match(target):
+            return SAFE, f"text:{target}"
+        return UNKNOWN, f"assign:{target or '?'}"
+
+    # 函数实参：看函数名
+    match = re.search(r"([A-Za-z_][\w\.]*)\s*\(\s*$", window)
+    if match:
+        callee = match.group(1).split(".")[-1]
+        if DANGER_CALL_RE.match(callee):
+            return DANGER, f"call:{callee}"
+        if SAFE_CALL_RE.match(callee):
+            return SAFE, f"text:{callee}"
+        return UNKNOWN, f"call:{callee}"
+
+    # 返回值：看外层函数名
+    if re.search(r"\b(?:return|case|match)\b", window) or not window:
+        if func_name:
+            if re.search(r"(?i)id$", func_name):
+                return DANGER, f"return:{func_name}"
+            if SAFE_FUNC_RE.match(func_name):
+                return SAFE, f"return:{func_name}"
+            return UNKNOWN, f"return:{func_name}"
+    return UNKNOWN, ""
+
+
+def _resolve_source_path(
+    trans_file: Path, trans_root: Path, source_root: Path
+) -> Optional[Path]:
+    """把 `trans/a/b.gd.json` 映射到 `source/a/b.gd`。"""
+    if trans_file.suffix != ".json":
+        return None
+    rel = trans_file.relative_to(trans_root)
+    stripped = rel.with_suffix("")  # a/b.gd
+    for candidate in (source_root / stripped, source_root / stripped.with_suffix("")):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _entry_line(
+    item: dict,
+    trans_file: Path,
+    trans_root: Path,
+    source_root: Path,
+    cache: Dict[Path, List[str]],
+) -> str:
+    """取「含该词条原文的那一行」源码；取不到返回空串。
+
+    `.gd` 词条的 `key` 是解析位置而非行号，只能从 `context` 里找；
+    `.tscn` 词条的 `context` 只有节点头，得用 `key` 的起始行号回读源码。
+    """
+    original = item.get("original", "")
+    context = item.get("context") or ""
+    header = _literal_head(original)
+    if not context.startswith("[node"):
+        for line in context.split("\n"):
+            if header and header in line:
+                return line.strip()
+        return ""
+
+    source = _resolve_source_path(trans_file, trans_root, source_root)
+    if source is None:
+        return ""
+    lines = cache.get(source)
+    if lines is None:
+        try:
+            lines = source.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            lines = []
+        cache[source] = lines
+    match = re.match(r"\((\d+)", item.get("key", ""))
+    if not match or not lines:
+        return ""
+    start = int(match.group(1))
+    for line in lines[max(0, start - 2) : start + 4]:
+        if header and header in line:
+            return line.strip()
+    return ""
+
+
+def _func_name(item: dict) -> str:
+    """从 context 里取 `Function Name: xxx`。"""
+    match = re.search(r"Function Name:\s*(\w+)", item.get("context") or "")
+    return match.group(1) if match else ""
+
+
+def _collect(trans_path: Path, source_path: Path) -> Tuple[List[dict], Dict[str, int]]:
+    """扫描词条，返回命中列表与统计。"""
+    cache: Dict[Path, List[str]] = {}
+    rows: List[dict] = []
+    stats = {
+        "identifier": 0,
+        "translated": 0,
+        "diff": 0,
+        "danger": 0,
+        "safe": 0,
+        "unknown": 0,
+        "whitespace": 0,
+    }
+
+    for file in sorted(trans_path.glob("**/*.json")):
+        # `.gd` 词条的 context 里直接带源码行，逐条判 sink 才有召回；
+        # `.tscn` 词条要回读源码文件，只判标识符形态/空白污染的
+        is_script = file.name.endswith(".gd.json")
+        with open(file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        for item in data:
+            original = item.get("original", "")
+            translation = item.get("translation", "")
+            identifier_like = is_identifier_like(original)
+            if identifier_like:
+                stats["identifier"] += 1
+            if not translation:
+                continue
+            if identifier_like:
+                stats["translated"] += 1
+            if translation == original:
+                continue
+            if identifier_like:
+                stats["diff"] += 1
+            # 只差空白：译文等于原文多/少几个空格，等于没翻
+            polluted = translation.strip() == original.strip()
+            if polluted:
+                stats["whitespace"] += 1
+            if not is_script and not identifier_like and not polluted:
+                continue
+
+            func_name = _func_name(item)
+            line = _entry_line(item, file, trans_path, source_path, cache)
+            if line:
+                bucket, sink = classify_sink(line, original, func_name)
+            else:
+                bucket, sink = UNKNOWN, "no-source"
+            stats[bucket] += 1
+            # 文本落点不告警；形状不像标识符、sink 又没识别的也不进报告
+            if bucket == SAFE:
+                continue
+            if bucket == UNKNOWN and not identifier_like:
+                continue
+            if polluted and bucket != DANGER:
+                sink = f"{sink},whitespace" if sink else "whitespace"
+            rows.append(
+                {
+                    "file": file.relative_to(trans_path).as_posix(),
+                    "key": item.get("key"),
+                    "original": original,
+                    "translation": translation,
+                    "stage": item.get("stage"),
+                    "bucket": bucket,
+                    "sink": sink,
+                    "line": line,
+                    "polluted": polluted,
+                    "identifier_like": identifier_like,
+                }
+            )
+    return rows, stats
+
+
+def _bucket_of(row: dict) -> str:
+    """报告分节：danger 且 stage=1 才算「必须回退」。"""
+    if row["bucket"] == DANGER:
+        return "danger" if row["stage"] == 1 else "pending_stage"
+    if row["polluted"]:
+        return "pending_whitespace"
+    return "unknown"
+
+
+_SECTION_TITLES = {
+    "danger": "【必须回退】译文覆盖了代码位置（stage=1，下次打包就会被替换）",
+    "pending_stage": "【待确认】落在代码位置，但 stage≠1（暂不替换，确认后会出事）",
+    "pending_whitespace": "【空白污染】译文与原文只差空白，等于没翻",
+    "unknown": "【待人工】形状像标识符，sink 未识别",
+}
 
 
 def check_identifier(
     trans_path: Union[Path, str] = DIR_TRANS,
     report_path: Union[Path, str] = None,
+    source_path: Union[Path, str] = DIR_SOURCE,
 ):
-    """扫描翻译词条，输出原文为标识符形态且译文与原文不一致的词条。"""
-    if isinstance(trans_path, str):
-        trans_path = Path(trans_path)
+    """扫描翻译词条，按 sink 分档输出可能破坏代码的译文。"""
+    trans_path = Path(trans_path)
+    source_path = Path(source_path)
     if report_path is None:
         report_path = DIR_CHECK / "identifier_check.txt"
-    elif isinstance(report_path, str):
+    else:
         report_path = Path(report_path)
 
     if not trans_path.exists():
         logger.error(f"{trans_path} not exist")
         return
+    if not source_path.exists():
+        logger.warning(f"{source_path} not exist, sink check degraded to shape only")
+        source_path = trans_path / "__no_source__"
 
-    total_identifier = 0  # 标识符形态词条总数
-    total_translated = 0  # 其中已有译文的词条数
-    total_diff = 0  # 其中原文与译文不一致的词条数
-    per_file: List[Tuple[Path, int, List[dict]]] = []
+    rows, stats = _collect(trans_path, source_path)
+    sections: Dict[str, List[dict]] = {
+        "danger": [],
+        "pending_stage": [],
+        "pending_whitespace": [],
+        "unknown": [],
+    }
+    for row in rows:
+        if row["bucket"] == SAFE:
+            continue
+        sections[_bucket_of(row)].append(row)
 
-    for file in sorted(trans_path.glob("**/*.json")):
-        with open(file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        file_diffs = []
-        for item in data:
-            original = item.get("original", "")
-            translation = item.get("translation", "")
-            if not is_identifier_like(original):
-                continue
-            total_identifier += 1
-            if not translation:
-                continue
-            total_translated += 1
-            if translation != original:
-                total_diff += 1
-                file_diffs.append(item)
-        if file_diffs:
-            per_file.append((file, len(file_diffs), file_diffs))
-
-    # 控制台输出
     logger.info(
-        f"identifier-like: {total_identifier} total, {total_translated} translated, "
-        f"{total_diff} original != translation"
+        f"identifier-like: {stats['identifier']} total, {stats['translated']} translated, "
+        f"{stats['diff']} original != translation"
     )
-    if total_diff == 0:
+    logger.info(
+        f"sink: {len(sections['danger'])} danger(stage=1), "
+        f"{len(sections['pending_stage'])} pending, "
+        f"{len(sections['pending_whitespace'])} whitespace, "
+        f"{len(sections['unknown'])} unknown "
+        f"(judged {stats['danger'] + stats['safe'] + stats['unknown']}, "
+        f"safe {stats['safe']})"
+    )
+    if not any(sections.values()):
         logger.info("no suspicious entry found")
         return
 
-    for file, count, diffs in per_file:
-        logger.warning(f"[{count}] {file}")
-        for item in diffs:
-            logger.warning(
-                f"  {item['original']!r} -> {item['translation']!r} "
-                f"(key={item['key']}, stage={item.get('stage', '?')})"
+    for name in ("danger", "pending_stage", "pending_whitespace", "unknown"):
+        items = sections[name]
+        if not items:
+            continue
+        emit = logger.warning if name == "danger" else logger.info
+        emit(f"{_SECTION_TITLES[name]} — {len(items)} 条")
+        for row in items:
+            emit(
+                f"  [{row['sink']}] {row['original']!r} -> {row['translation']!r} "
+                f"({row['file']} key={row['key']} stage={row['stage']})"
             )
+            if name == "danger" and row["line"]:
+                emit(f"      source: {row['line'][:160]}")
 
-    # 生成报告文件
-    report_path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
         "标识符形态词条检查报告",
         "=" * 60,
         f"扫描目录: {trans_path}",
-        f"标识符形态词条总数: {total_identifier}",
-        f"其中已有译文的: {total_translated}",
-        f"其中原文与译文不一致的: {total_diff}",
+        f"源码目录: {source_path}",
+        f"标识符形态词条总数: {stats['identifier']}",
+        f"其中已有译文的: {stats['translated']}",
+        f"其中原文与译文不一致的: {stats['diff']}",
+        "",
+        f"必须回退(danger, stage=1): {len(sections['danger'])}",
+        f"待确认(danger, stage≠1): {len(sections['pending_stage'])}",
+        f"空白污染: {len(sections['pending_whitespace'])}",
+        f"待人工(unknown): {len(sections['unknown'])}",
         "",
     ]
-    for file, count, diffs in per_file:
-        lines.append(f"===== {file} ({count}) =====")
-        for item in diffs:
-            lines.append(f"[key={item['key']}, stage={item.get('stage', '?')}]")
-            lines.append(f"  original:    {item['original']}")
-            lines.append(f"  translation: {item['translation']}")
-        lines.append("")
+    for name in ("danger", "pending_stage", "pending_whitespace", "unknown"):
+        items = sections[name]
+        if not items:
+            continue
+        lines.append(f"===== {_SECTION_TITLES[name]} — {len(items)} =====")
+        for row in items:
+            lines.append(
+                f"[{row['sink']}] key={row['key']} stage={row['stage']} file={row['file']}"
+            )
+            lines.append(f"  original:    {row['original']}")
+            lines.append(f"  translation: {row['translation']}")
+            if row["line"]:
+                lines.append(f"  source:      {row['line']}")
+            lines.append("")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     with open(report_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     logger.info(f"report saved to {report_path}")

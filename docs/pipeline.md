@@ -155,11 +155,30 @@ PYTHONPATH= ./.venv/Scripts/python.exe -c "from src.update import update; from s
 PYTHONPATH= ./.venv/Scripts/python.exe -c "from src.check_identifier import check_identifier; check_identifier()"
 ```
 
-扫 `trans/`，把「原文形如 PascalCase / camelCase / snake_case / kebab-case **且译文≠原文**」的词条列到控制台并写 `check/identifier_check.txt`。
-这类原文通常是 id、类名、枚举值、标签，翻译了会崩游戏或让逻辑失效。
-`stage=1` 且译文=原文的自动填充条目不算（它们本来就不该翻）。
+扫 `trans/`，按 **sink 判定**（字面量在源码里的落点）分四节写 `check/identifier_check.txt`：
 
-已知误报：连字符自然词（`Self-fuck`、`average-sized`、`Power-trip`）会被 kebab 规则抓到，需人工判断，不要盲改。
+| 分节 | 含义 | 处理 |
+|---|---|---|
+| 【必须回退】 | 落在代码位置且 `stage=1`，下次打包就会被替换 | 必须回退译文 |
+| 【待确认】 | 落在代码位置但 `stage≠1` | 确认前别放行 |
+| 【空白污染】 | 译文与原文只差空白（等于没翻，但会改写字面量） | 回退 |
+| 【待人工】 | 形状像标识符，但 sink 没识别 | 人工看 |
+
+判定规则：
+
+- **danger**：字面量左侧是 `id=` / `sceneID=` / `roomID=` 一类赋值、`== "…"`/`!= "…"`/`in [ "…" ]` 比较，或 `hasItemID(` / `createItem(` / `get_node(` / `is_in_group(` / `travel(` / `getEvent(` 等函数实参；
+- **safe**：左侧是 `text=` / `roomName` / `roomDescription` 等文本属性，或 `addButton(` / `saynn(` / `getName()` 返回值——只统计不告警；
+- **unknown**：其余。
+
+关键实现细节（改之前先看这几条）：
+
+- `.gd` 词条的 `key` 是解析位置不是行号，源码行只能从 `context` 里取（`Function Name: xxx` + 代码行）；
+- `.tscn` 词条的 `context` 只有节点头，要用 `key` 起始行号回读 `source/` 同名文件（`trans/X.tscn.json` ↔ `source/X.tscn`，抽样 589 条命中 565）；
+- `.gd` 条目逐条判 sink 才有召回（`if(state == "name")` 的 `name` 不是标识符形态），`.tscn` 条目只判标识符形态/空白污染，避免全量读场景文件；
+- 标识符后缀区分大小写（`slaveID` 算 id，`whatPlayerDid` 不算）；取赋值目标前先剔除 `[...]` 下标与字符串，避免把 `notFit[slaveID]` 当成给 `slaveID` 赋值；
+- `res://` 字体路径（`*.otf/ttf/woff2`）是中文包故意替换的斜体降级，判 safe。
+
+实测（2026-11-15，trans 110,054 条已译）：danger 57、unknown 14，旧版形状规则报 151 条里 kebab 那 102 条全是显示文本。
 
 ---
 
@@ -349,3 +368,23 @@ CI（`.github/workflows/runner.yml`）：
 结论：源码与项目已基本同步——撤销那条误改后只剩 `Game/Datapacks/UI/CrotchCode/VisualSlots/CrotchBigTextEditWindow.gd.json` 一个文件有差异（条目数变化、新增 0 条），本轮**没有要上传的新词条**。
 
 Paratranz 侧现状（`get_project`）：3821 文件 / 177,115 词条 / 已译 176,846 / `extra.version = 0.3.2`。
+
+---
+
+## 11. 2026-11-15：`check_identifier` 改为 sink 判定
+
+旧版只按形状（Pascal/camel/snake/kebab）猜，151 条报告里 kebab 的 102 条全是显示文本（`roomName = "Bio-lab"`、`addButton("Knot-fucking", …)`、`getPillName` 返回 `"TiTS"`），真正危险的反而混在里面。
+
+改版后（`src/check_identifier.py`）：
+
+| 项 | 旧版 | 新版 |
+|---|---|---|
+| 判定依据 | 原文形状 | 原文形状（候选）+ 源码行里字面量左侧的 sink |
+| 报告条数 | 151（全部无差别告警） | danger 57 / unknown 14 |
+| 耗时 | 31.7 s | 1.7 s（`.tscn` 只在需要时回读源码，带缓存） |
+| stage 过滤 | 无 | danger 只在 `stage=1` 时进「必须回退」 |
+
+danger 57 条的构成：`compare`（`if(state == "…")` / `fluidID == "Water"` 一类）37 条、`assign:id` 16 条（ContentBoard 条目 14 + `SlaveActionBase` 的 `var id = "ERROR"` + `EnterHideoutEvent`）、`call:createItem` 2 条（`StraponCanine` 译成 `"StraponCanine  "`、`WorldScene` 里的 `Strapon` → `"穿戴式假阳具"`）、`call:hasItemID` 1 条（`PortalPantiesFleshlight` → `"传送内裤飞机杯"`）、`assign:sceneID` 1 条（`FerriRecSceneOralOverstim`）。
+
+已核实：这 57 条里 56 条在当前 `output/` 里确实被替换成了中文，即 0.4.0 包里是坏的，需要回退译文（详见 `check/code_sink_report.txt`）。
+
