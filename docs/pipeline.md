@@ -235,6 +235,17 @@ upload_file_translation(project_id=10958, file_id=<同上映射>,
 
 0.4.0 实测回填量：新增 key 且带译文 **19,478 条**，译文文本变化 48 条，仅状态变化 9 条。
 
+### 7.3 回退能力
+
+**API 没有回退/回滚接口。** v0.5.2 文档里 Files 段只有 `createFile / updateFile / saveFile / deleteFile / getFile / getFileTranslation / updateFileTranslation`，History 段三个接口全是 GET；`paratranz` MCP 与 `Paratranz.NET` 里也 grep 不到 revert / rollback / 回滚。能用的只有下面三条：
+
+1. **快照重建（唯一全量手段）**：上传前用 `generate_artifact` + `download_artifact` 留一份导出包——`fetch/` 本身就是「上传前的线上状态」快照。要回退时，对快照里的每个文件 `update_file(incremental=False)` 覆盖原文，再 `upload_file_translation(force=True)` 覆盖译文，即回到快照那一刻。
+   代价：`incremental=False` 会删掉快照之后新增的 key，`force=True` 会覆盖快照之后人工改过的译文。所以**只在上传后、下一轮人工翻译开始前**才适合这么回退。
+2. **逐词条历史**：`get_history` 的记录带 `field / from / to / operation / uid / tid`（本项目已有 31 万余条），可以精确知道「谁在什么时候把什么改成了什么」，据此反推旧值，再用 `update_string` 或批量 `PUT /projects/{id}/strings` 写回。适合小范围误改，不适合整批回滚。
+3. **`file_revisions`**：每次上传的 `insert / update / remove` 计数与文件 hash，可以审计「哪次上传动了多少」，但**不能**据此还原内容。
+
+结论：上传本身不可撤销，**上传前留快照**是唯一可靠的保险。`pipeline.sh` 的 translate 阶段第一步就是下载导出包，`Artifact/artifact.zip` 即上传前状态，上传完成前不要清理它。
+
 ---
 
 ## 8. 替换、校验、打包、发版
