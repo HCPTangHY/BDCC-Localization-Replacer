@@ -61,6 +61,8 @@ SAFE_TARGET_RE = re.compile(
     r"name|message|msg|prompt|help_text|helptext|note|body"
     r")$"
 )
+#: 这些函数的**首个实参**是字典键 / 属性名，翻译了就查不到（`.get("Output", {})`）
+KEY_CALL_RE = re.compile(r"(?i)^(get|has|hasall|has_all|erase|pop|pop_front|pop_back)$")
 #: 这些函数的实参是 id / 路径 / 节点名，翻译会断
 DANGER_CALL_RE = re.compile(
     r"(?i)^("
@@ -164,6 +166,59 @@ def _is_danger_target(target: str) -> bool:
     return bool(DANGER_ID_SUFFIX_RE.search(target))
 
 
+def _count_top_level_commas(text: str) -> int:
+    """数实参列表里顶层的逗号个数（字符串、括号内的逗号不算）。"""
+    depth = 0
+    quote = ""
+    count = 0
+    for ch in text:
+        if quote:
+            if ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            count += 1
+    return count
+
+
+def _call_arguments(left: str) -> Tuple[str, int, str]:
+    """从字面量左侧文本还原「包住它的容器」「函数名」「实参序号」。
+
+    返回 `(callee, arg_index, opener)`：`opener` 是包住字面量的字符
+    （`(` 调用 / `[` 下标或列表 / `{` 字典），`arg_index` 为 0 表示第一个实参。
+    没找到未闭合的容器时返回 `("", 0, "")`。
+    """
+    depth = 0
+    for i in range(len(left) - 1, -1, -1):
+        ch = left[i]
+        if ch in ")]}":
+            depth += 1
+        elif ch in "([{":
+            if depth:
+                depth -= 1
+                continue
+            match = re.search(r"([A-Za-z_][\w\.]*)\s*$", left[:i])
+            callee = match.group(1).split(".")[-1] if match else ""
+            return callee, _count_top_level_commas(left[i + 1 :]), ch
+    return "", 0, ""
+
+
+def _is_subscript(left: str, opener: str) -> bool:
+    """`data["key"]` 是下标取值，`pick(["key"])` 只是列表字面量。"""
+    if opener != "[" or not left.endswith("["):
+        return False
+    if len(left) < 2:
+        return False
+    prev = left[-2]
+    return prev.isalnum() or prev in "_]"
+
+
 def classify_sink(line: str, original: str, func_name: str = "") -> Tuple[str, str]:
     """按字面量左侧的落点判断翻译是否安全。
 
@@ -172,7 +227,14 @@ def classify_sink(line: str, original: str, func_name: str = "") -> Tuple[str, s
     if FONT_PATH_RE.search(original):
         return SAFE, "font"
     idx = _find_literal_index(line, original)
-    left = (line[:idx] if idx >= 0 else line).rstrip()
+    raw_left = (line[:idx] if idx >= 0 else line).rstrip()
+    callee, arg_index, opener = _call_arguments(raw_left)
+
+    # 下标取值：data["key"] / FEATURE_TO_COMMAND["vibrate"]
+    if _is_subscript(raw_left, opener):
+        return DANGER, f"index:{callee}"
+
+    left = raw_left
     # 列表里的字面量：去掉包住它的方括号/逗号再看左侧（不要吃函数左括号）
     while left.endswith(("[", ",")):
         left = left[:-1].rstrip()
@@ -192,14 +254,19 @@ def classify_sink(line: str, original: str, func_name: str = "") -> Tuple[str, s
             return SAFE, f"text:{target}"
         return UNKNOWN, f"assign:{target or '?'}"
 
-    # 函数实参：看函数名
-    match = re.search(r"([A-Za-z_][\w\.]*)\s*\(\s*$", window)
-    if match:
-        callee = match.group(1).split(".")[-1]
+    # 函数实参：看函数名与实参位置（`.get("键", 默认值)` 的首参是字典键）
+    if opener == "(" and callee:
+        if KEY_CALL_RE.match(callee):
+            if arg_index == 0:
+                return DANGER, f"key:{callee}"
+            return UNKNOWN, f"default:{callee}"
         if DANGER_CALL_RE.match(callee):
             return DANGER, f"call:{callee}"
         if SAFE_CALL_RE.match(callee):
-            return SAFE, f"text:{callee}"
+            # 文案函数只有前两个实参是给人看的，后面常是 action id
+            if arg_index <= 1:
+                return SAFE, f"text:{callee}"
+            return UNKNOWN, f"arg{arg_index}:{callee}"
         return UNKNOWN, f"call:{callee}"
 
     # 返回值：看外层函数名

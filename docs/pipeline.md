@@ -166,8 +166,9 @@ PYTHONPATH= ./.venv/Scripts/python.exe -c "from src.check_identifier import chec
 
 判定规则：
 
-- **danger**：字面量左侧是 `id=` / `sceneID=` / `roomID=` 一类赋值、`== "…"`/`!= "…"`/`in [ "…" ]` 比较，或 `hasItemID(` / `createItem(` / `get_node(` / `is_in_group(` / `travel(` / `getEvent(` 等函数实参；
-- **safe**：左侧是 `text=` / `roomName` / `roomDescription` 等文本属性，或 `addButton(` / `saynn(` / `getName()` 返回值——只统计不告警；
+- **danger**：字面量左侧是 `id=` / `sceneID=` / `roomID=` 一类赋值、`== "…"`/`!= "…"`/`in [ "…" ]` 比较、`data["键"]` 下标取值，或 `hasItemID(` / `createItem(` / `get_node(` / `is_in_group(` / `travel(` / `getEvent(` 等函数实参；
+- **danger（`.get` 首参）**：`.get("键", 默认值)`、`.has("键")`、`.erase("键")` 的**第一个实参是字典键/属性名**，翻译就查不到——`theDevicesList.get("Devices", {})` 改成 `get("设备", {})` 会让设备列表直接为空；第二参（默认值）只标 unknown；
+- **safe**：左侧是 `text=` / `roomName` / `roomDescription` 等文本属性，或 `addButton(` / `saynn(` / `getName()` 返回值——只统计不告警。注意 `addButton(文案, 提示, action_id)` 只有前两个实参算 safe，第三参是 action id；
 - **unknown**：其余。
 
 关键实现细节（改之前先看这几条）：
@@ -380,11 +381,13 @@ Paratranz 侧现状（`get_project`）：3821 文件 / 177,115 词条 / 已译 1
 | 项 | 旧版 | 新版 |
 |---|---|---|
 | 判定依据 | 原文形状 | 原文形状（候选）+ 源码行里字面量左侧的 sink |
-| 报告条数 | 151（全部无差别告警） | danger 57 / unknown 14 |
-| 耗时 | 31.7 s | 1.7 s（`.tscn` 只在需要时回读源码，带缓存） |
+| 报告条数 | 151（全部无差别告警） | danger 60 / unknown 14 |
+| 耗时 | 31.7 s | 1.6 s（`.tscn` 只在需要时回读源码，带缓存） |
 | stage 过滤 | 无 | danger 只在 `stage=1` 时进「必须回退」 |
 
-danger 57 条的构成：`compare`（`if(state == "…")` / `fluidID == "Water"` 一类）37 条、`assign:id` 16 条（ContentBoard 条目 14 + `SlaveActionBase` 的 `var id = "ERROR"` + `EnterHideoutEvent`）、`call:createItem` 2 条（`StraponCanine` 译成 `"StraponCanine  "`、`WorldScene` 里的 `Strapon` → `"穿戴式假阳具"`）、`call:hasItemID` 1 条（`PortalPantiesFleshlight` → `"传送内裤飞机杯"`）、`assign:sceneID` 1 条（`FerriRecSceneOralOverstim`）。
+danger 60 条的构成：`compare`（`if(state == "…")` / `fluidID == "Water"` 一类）37 条、`assign:id` 16 条（ContentBoard 条目 14 + `SlaveActionBase` 的 `var id = "ERROR"` + `EnterHideoutEvent`）、`key:get` 3 条（ButtplugIO 的 `theDevicesList.get("Devices", {})` / `theFeature.get("Output", {})` / `.get("Value", [0,1])`）、`call:createItem` 2 条（`StraponCanine` 译成 `"StraponCanine  "`、`WorldScene` 里的 `Strapon` → `"穿戴式假阳具"`）、`call:hasItemID` 1 条（`PortalPantiesFleshlight` → `"传送内裤飞机杯"`）、`assign:sceneID` 1 条（`FerriRecSceneOralOverstim`）。
 
-已核实：这 57 条里 56 条在当前 `output/` 里确实被替换成了中文，即 0.4.0 包里是坏的，需要回退译文（详见 `check/code_sink_report.txt`）。
+已核实：这 60 条里 56 条在当前 `output/` 里确实被替换成了中文，即 0.4.0 包里是坏的，需要回退译文（详见 `check/code_sink_report.txt`）；新增的 3 条 `key:get` 同样已在 `output/Util/SexToySupport/Backends/ButtplugIO.gd:168/187/200` 确认被替换。
+
+已知未覆盖：整段数组/字典被做成一条词条时（`for x in ["Oscillate", …]`、`const FEATURE_TO_COMMAND = {vibrate = "Vibrate", …}`、`const STATUS_TO_TEXT = […]`），原文以 `[`/`{` 开头，`_literal_head` 找不到锚点，落 unknown 后被形状筛选丢弃——这几处目前在 `output/` 里都是中文，Lovense/Buttplug 后端因此不可用。
 
