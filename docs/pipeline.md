@@ -244,12 +244,38 @@ upload_file_translation(project_id=10958, file_id=<同上映射>,
 3. `rollback_file_revision(project_id, revision_id)` 执行回滚。它把**原文**恢复成那次上传后的状态，译文仍以项目里现有词条为准，不随 revision 回退；
 4. `delete_file_revision` 删除历史记录（不可恢复），`rename_folder` / `merge_files` 用于整理文件结构。
 
+实测结论（0.4.0 上传时验证）：
+
+- `update_file` / `create_file` 产生的 revision（`type = update`）**可以回滚**，回滚后新插入的 key 消失、文件回到上传前状态；
+- `upload_file_translation` 产生的 revision（`type = import`）回滚时服务端返回 **HTTP 500**，即**译文回填不可用回滚撤销**——要回退译文只能靠逐词条历史或快照重建；
+- `incremental=True` 下 revision 里的 `remove` 只是差异计数，旧 key 并不会被删除（实测项目已译数只增不减）。
+
 除回滚外还有两条辅助手段：
 
 - **逐词条历史**：`get_history` 的记录带 `field / from / to / operation / uid / tid`（本项目已有 31 万余条），可精确还原某条译文的旧值，再用 `update_string` / 批量 `PUT /strings` 写回；
 - **快照重建（兜底）**：上传前用 `generate_artifact` + `download_artifact` 留导出包（`fetch/` 就是它）。要整体回到某个时点，就对快照里每个文件 `update_file(incremental=False)` + `upload_file_translation(force=True)`。代价：会删掉快照之后新增的 key、覆盖之后的人工译文。
 
 结论：整批上传建议先留快照，出问题优先用文件回滚（粒度小、不动译文），必要时再上快照重建。
+
+### 7.4 上传脚本
+
+`scripts/paratranz_upload.py` 把上面三步串起来（用 paratranz-mcp 的 venv 跑，复用它的重试与连接池）：
+
+```bash
+cd BDCC-Localization-Replacer
+export PARATRANZ_API_TOKEN=xxx
+PY=E:/Projects/AI/MCPs/paratranz-mcp/.venv/Scripts/python.exe
+
+$PY scripts/paratranz_upload.py --dry-run                       # 只看计划
+$PY scripts/paratranz_upload.py --only change --file GameExtenderSystem --limit 1   # 单文件试传
+$PY scripts/paratranz_upload.py --only change --report upload_change.json
+$PY scripts/paratranz_upload.py --only trans --report upload_trans.json
+$PY scripts/paratranz_upload.py --only deprecated --report upload_deprecated.json
+```
+
+参数：`--project`（默认 10958）、`--only change|trans|deprecated|all`、`--file` 子串过滤、`--limit`、`--sleep`（默认 0.15s，官方限流 480 次/分钟/用户）、`--report`。
+
+0.4.0 首次上传实测：`change` 301 更新 + 75 新建（insert 26,498）、`trans` 228 文件回填、`deprecated` 14 更新 + 28 新建；总耗时约 4.5 分钟。项目侧词条 177,115 → 203,763，已译 176,846 → 196,208，文件 3,821 → 3,924。
 
 ---
 
