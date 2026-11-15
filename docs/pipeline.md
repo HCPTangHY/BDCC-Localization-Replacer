@@ -237,14 +237,19 @@ upload_file_translation(project_id=10958, file_id=<同上映射>,
 
 ### 7.3 回退能力
 
-**API 没有回退/回滚接口。** v0.5.2 文档里 Files 段只有 `createFile / updateFile / saveFile / deleteFile / getFile / getFileTranslation / updateFileTranslation`，History 段三个接口全是 GET；`paratranz` MCP 与 `Paratranz.NET` 里也 grep 不到 revert / rollback / 回滚。能用的只有下面三条：
+**API v0.7.0 有文件历史回滚**：`POST /projects/{projectId}/files/revisions/{revisionId}`，body `{"op": "revert"}`；MCP 工具是 `rollback_file_revision(project_id, revision_id)`。
 
-1. **快照重建（唯一全量手段）**：上传前用 `generate_artifact` + `download_artifact` 留一份导出包——`fetch/` 本身就是「上传前的线上状态」快照。要回退时，对快照里的每个文件 `update_file(incremental=False)` 覆盖原文，再 `upload_file_translation(force=True)` 覆盖译文，即回到快照那一刻。
-   代价：`incremental=False` 会删掉快照之后新增的 key，`force=True` 会覆盖快照之后人工改过的译文。所以**只在上传后、下一轮人工翻译开始前**才适合这么回退。
-2. **逐词条历史**：`get_history` 的记录带 `field / from / to / operation / uid / tid`（本项目已有 31 万余条），可以精确知道「谁在什么时候把什么改成了什么」，据此反推旧值，再用 `update_string` 或批量 `PUT /projects/{id}/strings` 写回。适合小范围误改，不适合整批回滚。
-3. **`file_revisions`**：每次上传的 `insert / update / remove` 计数与文件 hash，可以审计「哪次上传动了多少」，但**不能**据此还原内容。
+1. `file_revisions(project_id, page, page_size)` 找到那次上传的记录（含 `insert / update / remove` 计数与 `hash`）；
+2. `get_file_revision(project_id, revision_id)` 确认范围，必要时 `get_file_content(project_id, file_id, rev=revision_id)` 先看回滚后的原文长什么样；
+3. `rollback_file_revision(project_id, revision_id)` 执行回滚。它把**原文**恢复成那次上传后的状态，译文仍以项目里现有词条为准，不随 revision 回退；
+4. `delete_file_revision` 删除历史记录（不可恢复），`rename_folder` / `merge_files` 用于整理文件结构。
 
-结论：上传本身不可撤销，**上传前留快照**是唯一可靠的保险。`pipeline.sh` 的 translate 阶段第一步就是下载导出包，`Artifact/artifact.zip` 即上传前状态，上传完成前不要清理它。
+除回滚外还有两条辅助手段：
+
+- **逐词条历史**：`get_history` 的记录带 `field / from / to / operation / uid / tid`（本项目已有 31 万余条），可精确还原某条译文的旧值，再用 `update_string` / 批量 `PUT /strings` 写回；
+- **快照重建（兜底）**：上传前用 `generate_artifact` + `download_artifact` 留导出包（`fetch/` 就是它）。要整体回到某个时点，就对快照里每个文件 `update_file(incremental=False)` + `upload_file_translation(force=True)`。代价：会删掉快照之后新增的 key、覆盖之后的人工译文。
+
+结论：整批上传建议先留快照，出问题优先用文件回滚（粒度小、不动译文），必要时再上快照重建。
 
 ---
 
