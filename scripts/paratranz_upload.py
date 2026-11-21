@@ -19,6 +19,13 @@
   --file <substr>      只处理路径包含该子串的文件（先做单文件试传）
   --limit N            最多处理 N 个文件
   --report out.json    处理明细写入 JSON
+  --force-translation  译文回填改用 force=true（默认 false）。只有修错配/纠错这类一次性修复才用，
+                       且务必配合 --file 限定到单个文件——force=true 会覆盖人工编辑过的译文。
+  --strict             上传后计数核对不一致时以退出码 2 结束（默认只告警）
+
+上传后会自动做一次计数核对（见 verify_counts）：ParaTranz 对每次原文更新会返回
+revision{insert,update,remove}，这里用本地 fetch/（上传前快照）与本次载荷按 key 估算期望值，
+两者对不上就告警——这是发现「key 换代后译文/原文错位」这类事故的最便宜信号。
 """
 
 from __future__ import annotations
@@ -69,6 +76,43 @@ def needs_translation_backfill(trans_file: Path, trans_root: Path, fetch_root: P
     return False
 
 
+def expected_counts(fetch_file: Path, payload_file: Path) -> dict:
+    """用本地快照(fetch/)与本次载荷按 key 估算 ParaTranz 会报的 insert/update/remove。
+
+    - insert: 载荷里有、快照里没有的 key
+    - remove: 快照里有、载荷里没有的 key
+    - update: 两边同 key 但原文不同的条目
+    快照缺文件时按「全部新增」估算（首次入库）。
+    """
+    old = {i["key"]: i.get("original") for i in load_json(fetch_file)} if fetch_file.exists() else {}
+    new = {i["key"]: i.get("original") for i in load_json(payload_file)}
+    old_keys, new_keys = set(old), set(new)
+    return {
+        "insert": len(new_keys - old_keys),
+        "remove": len(old_keys - new_keys),
+        "update": sum(1 for k in new_keys & old_keys if new[k] != old[k]),
+        "baseline": fetch_file.exists(),
+    }
+
+
+def verify_counts(rows: list[dict], tolerance: int = 2) -> tuple[list[dict], int]:
+    """把接口返回的 revision 计数与本地期望值比对，返回 (不一致清单, 参与核对条数)。
+
+    ParaTranz 的计数口径未在文档里写明，因此留 tolerance 容差（默认 2 条）：
+    超差才当作异常，用于发现 key 换代后原文/译文错位、旧 key 未清理一类的事故。
+    """
+    checked, bad = 0, []
+    for r in rows:
+        got, exp = r.get("got"), r.get("expected")
+        if not got or not exp:
+            continue
+        checked += 1
+        diffs = {k: got[k] - exp[k] for k in ("insert", "update", "remove")}
+        if any(abs(v) > tolerance for v in diffs.values()):
+            bad.append({**r, "diffs": diffs})
+    return bad, checked
+
+
 async def run(args) -> int:
     mod = load_client(args.mcp_dir)
     client = mod._make_client()  # 共享实例，自带重试
@@ -82,6 +126,7 @@ async def run(args) -> int:
     print(f"项目内文件 {len(by_name)} 个")
 
     report = {"project": project, "dry_run": args.dry_run, "steps": {}}
+    verify_rows: list[dict] = []
 
     def pick(files: list[Path], filter_sub: str | None) -> list[Path]:
         if filter_sub:
@@ -127,6 +172,12 @@ async def run(args) -> int:
                 revision = resp.get("revision") or {}
                 stats["insert"] += revision.get("insert") or 0
                 stats["remove"] += revision.get("remove") or 0
+                if revision:
+                    verify_rows.append({
+                        "file": rel,
+                        "expected": expected_counts(fetch_root / rel, local),
+                        "got": {k: revision.get(k) or 0 for k in ("insert", "update", "remove")},
+                    })
                 if resp.get("file", {}).get("id"):
                     by_name[rel] = resp["file"]
             details.append({"file": rel, "action": "update" if info else "create"})
@@ -137,6 +188,8 @@ async def run(args) -> int:
 
     # ---- 2. trans: 译文回填 ----
     if args.only in ("all", "trans"):
+        if args.force_translation:
+            print("!! 译文回填使用 force=true：会覆盖人工编辑过的译文，请确认已用 --file 限定范围")
         candidates = sorted(trans_root.rglob("*.json"))
         if args.file:
             candidates = [f for f in candidates if args.file in f.as_posix()]
@@ -154,7 +207,7 @@ async def run(args) -> int:
             resp = await call(
                 "POST",
                 f"/projects/{project}/files/{info['id']}/translation",
-                data={"force": "false", "skip": "false"},
+                data={"force": "true" if args.force_translation else "false", "skip": "false"},
                 files={"file": (f.name, f.read_bytes(), "application/json")},
             )
             stats["uploaded"] += 1
@@ -196,10 +249,32 @@ async def run(args) -> int:
         report["steps"]["deprecated"] = {"stats": stats, "details": details}
         print(f"deprecated 完成: {stats}")
 
+    # ---- 4. 计数核对：接口 revision 与本地期望 ----------------
+    bad, checked = verify_counts(verify_rows)
+    if checked:
+        print(f"计数核对: 已核对 {checked} 个文件，异常 {len(bad)} 个")
+        for r in bad[:20]:
+            exp, got, d = r["expected"], r["got"], r["diffs"]
+            print(
+                f"  [异常] {r['file']}\n"
+                f"         期望 insert={exp['insert']} update={exp['update']} remove={exp['remove']}"
+                f"（基线{'有' if exp['baseline'] else '无'}）\n"
+                f"         实际 insert={got['insert']} update={got['update']} remove={got['remove']}"
+                f"  差 {d['insert']:+d}/{d['update']:+d}/{d['remove']:+d}"
+            )
+        if len(bad) > 20:
+            print(f"  …其余 {len(bad) - 20} 个见 report")
+        report["verify"] = {"checked": checked, "mismatches": bad}
+    else:
+        print("计数核对: 没有 revision 返回（dry-run 或全部 hashMatched），跳过")
+
     await client.close()
     if args.report:
         Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"报告写入 {args.report}")
+    if bad and args.strict:
+        print("--strict 生效：计数核对存在异常，退出码 2")
+        return 2
     return 0
 
 
@@ -213,6 +288,9 @@ def main() -> None:
     p.add_argument("--limit", type=int, default=0)
     p.add_argument("--sleep", type=float, default=0.15, help="每次写请求后的间隔秒数（限流用）")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--force-translation", action="store_true",
+                   help="译文回填用 force=true（默认 false）。仅用于修错配等一次性纠错，务必配合 --file")
+    p.add_argument("--strict", action="store_true", help="计数核对异常时以退出码 2 结束")
     p.add_argument("--report", default="upload_report.json")
     args = p.parse_args()
     started = time.time()
