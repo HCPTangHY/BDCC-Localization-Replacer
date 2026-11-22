@@ -99,6 +99,12 @@ def check_untranslated(root: Path, fails: list, warns: list):
 
 
 def main():
+    # Windows runner 的默认控制台编码是 cp1252，中文告警会直接抛 UnicodeEncodeError
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=str(Path(__file__).resolve().parents[1]))
     args = ap.parse_args()
