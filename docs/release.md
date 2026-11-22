@@ -153,9 +153,9 @@ git tag -f v0.4.2-chs-1.0.0a <旧commit> && git push -f origin v0.4.2-chs-1.0.0a
 
 | 级别 | 问题 | 影响 | 建议 |
 |---|---|---|---|
-| P0 | `runner.yml:40` 用 `git tag -l "v*" --sort=-version:refname \| head -1` 取版本，而不是本次推送的 tag | 热修补丁的 tag 若比历史版本号小，会构建/发布成**最新版号** | 改为 `echo "RELEASE_VERSION=${{ github.ref_name }}"` |
-| P0 | 发布库 `BDCC` 子模块指针未提交（当前 `M BDCC`） | CI 用旧游戏代码构建 | 每次发版前 §2 检查 |
-| P1 | CI 无文本质量门禁（只有 python 退出码） | identifier 退回、BBCode 断裂等可以一路发出去 | 在 `translate` 后加一步跑 `check_identifier` + bbcode 扫描，danger≠0 直接 fail |
+| ~~P0~~ 已修 | ~~`runner.yml` 取「仓库里最大的 v* tag」而非本次推送的 tag~~ | 热修补丁会发布成错误版本号 | 已改为 `RELEASE_VERSION=${{ github.ref_name }}`（44bbcc2） |
+| ~~P0~~ 已对齐 | 子模块指针曾落后（`M BDCC`） | CI 会用旧游戏代码构建 | 已提交：BDCC `9e0eecbe` / 工具库 `51879f4`（44bbcc2）；每次发版前仍照 §2 复查 |
+| ~~P1~~ 已修 | ~~CI 无文本质量门禁~~ | identifier 退回、BBCode 断裂可以一路发出去 | 已加 `scripts/quality_gate.py`（翻译后自动跑：danger≠0 / BBCode 缺失≠0 → fail；多出与待人工仅告警） |
 | P1 | 主菜单版本号丢了本体版本（译文把 `GlobalRegistry.getGameVersionString()` 删掉，只留 `版本：TRANSLATION_VERSION_HERE`） | 玩家无法从界面确认游戏本体版本，反馈问题难定位 | 译文改成 `"版本："+GlobalRegistry.getGameVersionString()+"　汉化：TRANSLATION_VERSION_HERE"` |
 | P2 | 预发布 tag `bdcc.YY.MM.DD` 与正式 `v*` 命名不同，且预发布不触发 Pages | 预发布包无法从页面看到；tag 列表混杂 | 统一为 `v<游戏版本>-chs-nightly.YYMMDD` 或维持现状但在此登记 |
 | P2 | README 更新日志里混用了 `2026.8.25` / `2026.5.17` 这类无前导零写法 | 排序/检索不便 | 新条目沿用现有写法即可，暂不统一 |
