@@ -50,6 +50,13 @@ CASES = [
     ('\taddButtonAt(0, "Name", "tip", "method")', 'method', '', DANGER),
     ('\taddButtonWithChecks("Name", "tip", "method", [], checks)', 'method', '', DANGER),
     ('\taddDisabledButton("Name", "tip")', 'tip', '', SAFE),
+    # 动画名：AnimationPlayer / 状态机的节点名，翻译后 play("咬") 找不到动画
+    ('\ttheAnim.animName = "Bite"', 'Bite', '', DANGER),
+    ('\ttheAnim.animNameKnockedDown = "KnockedDownBite"', 'KnockedDownBite', '', DANGER),
+    ('\tanimPlayer.playAnimRaw(_indx, "Defeat")', 'Defeat', '', DANGER),
+    ('\tanimPlayer.playAnimRaw(_indx, "Block", "", "", "", true)', 'Block', '', DANGER),
+    ('\tstate_machine.travel("IDLE")', 'IDLE', '', DANGER),
+    ('\tlabel.text = "Bite"', 'Bite', '', SAFE),
     # 未登记参数角色的文案函数：>=3 参只算待人工
     ('\tformat("%s and %s", a, b)', 'a', '', UNKNOWN),
 ]

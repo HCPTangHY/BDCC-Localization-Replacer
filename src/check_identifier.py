@@ -61,6 +61,10 @@ DANGER_TARGET_RE = re.compile(
     r"path|resource|state|action|mode|slot|fluid|type_code"
     r")$"
 )
+#: 动画名专用：`animName` / `animNameKnockedDown` / `anim` —— 动画名必须与
+#: AnimationPlayer / 状态机里的节点名逐字一致，翻译后 `play("咬")` 找不到动画，
+#: 于是「站着不播放、倒地才有动画」（倒地那份 `KnockedDownXxx` 往往没被翻译）
+DANGER_ANIM_TARGET_RE = re.compile(r"(?i)^anim[a-z_]*$")
 #: 标识形态的目标名后缀（**区分大小写**）：camelCase 写 `ID`，snake 写 `_id`
 DANGER_ID_SUFFIX_RE = re.compile(r"(?:ID|_id)$|^id$")
 #: 赋值目标是这些文本属性时，翻译是安全的
@@ -73,14 +77,15 @@ SAFE_TARGET_RE = re.compile(
 )
 #: 这些函数的**首个实参**是字典键 / 属性名，翻译了就查不到（`.get("Output", {})`）
 KEY_CALL_RE = re.compile(r"(?i)^(get|has|hasall|has_all|erase|pop|pop_front|pop_back)$")
-#: 这些函数的实参是 id / 路径 / 节点名，翻译会断
+#: 这些函数的实参是 id / 路径 / 节点名 / 动画名，翻译会断
 DANGER_CALL_RE = re.compile(
     r"(?i)^("
     r"hasitemid|createitem|getitem|getitemid|"
     r"getnode|hasnode|findnode|"
     r"isingroup|addtogroup|removefromgroup|getnodesingroup|"
     r"load|preload|setmeta|hasmeta|getmeta|hasmethod|"
-    r"call|connect|emitsignal|travel|play|getevent|addtrigger|adduniquetrigger"
+    r"call|connect|emitsignal|travel|play|getevent|addtrigger|adduniquetrigger|"
+    r"playanimraw|playanim|playattack|playattackreaction|playattackpayload"
     r")$"
 )
 #: 这些函数的前两个实参是给人看的文案
@@ -186,7 +191,7 @@ def _is_danger_target(target: str) -> bool:
     """赋值目标是否意味着「这是代码里的标识」。"""
     if not target:
         return False
-    if DANGER_TARGET_RE.match(target):
+    if DANGER_TARGET_RE.match(target) or DANGER_ANIM_TARGET_RE.match(target):
         return True
     return bool(DANGER_ID_SUFFIX_RE.search(target))
 
