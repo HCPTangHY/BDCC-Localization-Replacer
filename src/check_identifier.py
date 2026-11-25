@@ -12,8 +12,18 @@
    （后者仅当段内出现数字/内部驼峰，或匹配 `zh-CN` 这类语言代码时才收）。
 2. **sink 判定**（`classify_sink`）：在源码行里看字面量**左侧的落点**——
    `id=` / `sceneID=` 赋值、`== "…"` 比较、`hasItemID(` 之类的函数实参
-   判为 danger；`text=` / `roomName` / `addButton(` / `getName()` 返回
-   判为 safe（只统计，不告警）；其余判为 unknown（保留人工核查）。
+   判为 danger；`text=` / `roomName` / `addButton(` 首个实参 / `getName()`
+   返回判为 safe（只统计，不告警）；其余判为 unknown（保留人工核查）。
+
+**文案函数的后续实参不是文案**：`addButton(text, tooltip, method, args…)` 的
+第三参起是 action id（`"continue"`、`"loot"`、`"submit"`），翻译后
+`match` 不到对应方法、按钮点了没反应、剧情卡死。这类字面量往往不像标识符
+（纯小写单词），形状筛选抓不到，必须靠调用点参数表判 danger——
+见 `TEXT_CALL_ARG_SPEC`。
+
+源码行的取法：`.gd` 词条优先用 `context` 里的语句；`context` 为空时用 `key`
+的字符偏移回读 `source/` 同名文件（偏移处即字面量，向前取行首到字面量之间
+的文本作左侧）。`.tscn` 的 `key` 是行号，按行号窗口回读。
 
 报告分四节：必须回退（danger 且 stage=1）、待确认（danger 但 stage≠1）、
 空白污染（译文与原文只差空白）、待人工（形状像标识符但 sink 未识别）。
@@ -73,15 +83,30 @@ DANGER_CALL_RE = re.compile(
     r"call|connect|emitsignal|travel|play|getevent|addtrigger|adduniquetrigger"
     r")$"
 )
-#: 这些函数的实参是给人看的文案
+#: 这些函数的前两个实参是给人看的文案
 SAFE_CALL_RE = re.compile(
     r"(?i)^("
     r"addbutton|adddisabledbutton|addbuttonwithchecks|addbuttonwithcheck|"
+    r"addunlesslate|addbuttonat|adddisabledbuttonat|"
     r"say|sayn|saynn|addtext|settext|setdeferred|"
     r"print|printerr|pusherror|pushwarning|tr|format|addline|"
     r"bbcode|appendbbcode"
     r")$"
 )
+#: 文案函数里「从第几个实参起是代码 id」。
+#: `addButton(text, tooltip, method, args)` 第三参是 action id——翻译成
+#: `addButton("继续", …, "继续")` 后 `match method` 恒不命中，按钮点了没反应、
+#: 剧情停在这里；`addButtonAt(place, text, tooltip, method)` 的 method 是第四参。
+#: 这类字面量通常是纯小写单词（`continue`/`loot`/`submit`），形状规则抓不到，
+#: 所以必须在调用点按位置判 danger。表里没有的函数沿用「>=2 只算 unknown」。
+TEXT_CALL_ARG_SPEC: Dict[str, int] = {
+    "addbutton": 2,
+    "addbuttonwithchecks": 2,
+    "addbuttonwithcheck": 2,
+    "addunlesslate": 2,
+    "addbuttonat": 3,
+    "adddisabledbuttonat": 3,
+}
 #: 返回值落点：函数名像「取显示文本」时，翻译安全
 SAFE_FUNC_RE = re.compile(
     r"(?i)^_?(get|_)?("
@@ -219,15 +244,9 @@ def _is_subscript(left: str, opener: str) -> bool:
     return prev.isalnum() or prev in "_]"
 
 
-def classify_sink(line: str, original: str, func_name: str = "") -> Tuple[str, str]:
-    """按字面量左侧的落点判断翻译是否安全。
-
-    返回 `(档位, sink 说明)`，档位取 `danger` / `safe` / `unknown`。
-    """
-    if FONT_PATH_RE.search(original):
-        return SAFE, "font"
-    idx = _find_literal_index(line, original)
-    raw_left = (line[:idx] if idx >= 0 else line).rstrip()
+def _classify_left(raw_left: str, original: str, func_name: str = "") -> Tuple[str, str]:
+    """按「字面量左侧文本」判断落点，返回 `(档位, sink 说明)`。"""
+    raw_left = raw_left.rstrip()
     callee, arg_index, opener = _call_arguments(raw_left)
 
     # 下标取值：data["key"] / FEATURE_TO_COMMAND["vibrate"]
@@ -263,7 +282,13 @@ def classify_sink(line: str, original: str, func_name: str = "") -> Tuple[str, s
         if DANGER_CALL_RE.match(callee):
             return DANGER, f"call:{callee}"
         if SAFE_CALL_RE.match(callee):
-            # 文案函数只有前两个实参是给人看的，后面常是 action id
+            spec = TEXT_CALL_ARG_SPEC.get(callee.lower())
+            if spec is not None:
+                # 文案函数：显示文本之后的实参是 action/method id
+                if arg_index < spec:
+                    return SAFE, f"text:{callee}"
+                return DANGER, f"action:{callee}"
+            # 未登记参数角色的文案函数只有前两个实参算文案，后面算待人工
             if arg_index <= 1:
                 return SAFE, f"text:{callee}"
             return UNKNOWN, f"arg{arg_index}:{callee}"
@@ -280,6 +305,18 @@ def classify_sink(line: str, original: str, func_name: str = "") -> Tuple[str, s
     return UNKNOWN, ""
 
 
+def classify_sink(line: str, original: str, func_name: str = "") -> Tuple[str, str]:
+    """按字面量左侧的落点判断翻译是否安全。
+
+    返回 `(档位, sink 说明)`，档位取 `danger` / `safe` / `unknown`。
+    """
+    if FONT_PATH_RE.search(original):
+        return SAFE, "font"
+    idx = _find_literal_index(line, original)
+    raw_left = line[:idx] if idx >= 0 else line
+    return _classify_left(raw_left, original, func_name)
+
+
 def _resolve_source_path(
     trans_file: Path, trans_root: Path, source_root: Path
 ) -> Optional[Path]:
@@ -294,17 +331,65 @@ def _resolve_source_path(
     return None
 
 
+def _source_text(source: Path, cache: Dict[Path, Optional[str]]) -> Optional[str]:
+    """按文件缓存源码全文（`key` 偏移回读用）。"""
+    if source not in cache:
+        try:
+            cache[source] = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            cache[source] = None
+    return cache[source]
+
+
+def _line_at_span(
+    item: dict,
+    trans_file: Path,
+    trans_root: Path,
+    source_root: Path,
+    cache: Dict[Path, Optional[str]],
+) -> Optional[Tuple[str, str]]:
+    """用 `key` 的字符偏移回读源码，返回 `(整行文本, 字面量左侧文本)`。
+
+    `.gd` 的 `key` 是 `"(开始, 结束)"` 字符偏移（不是行号）：偏移即字面量，
+    多行字符串的偏移常落在开引号之后的转义处，所以偏移前一个字符是引号时
+    把字面量起点左移一位，保证左侧文本里的引号是配平的。
+    """
+    match = re.match(r"\((\d+)", str(item.get("key", "")))
+    if not match:
+        return None
+    source = _resolve_source_path(trans_file, trans_root, source_root)
+    if source is None:
+        return None
+    text = _source_text(source, cache)
+    if text is None:
+        return None
+    start = int(match.group(1))
+    if start >= len(text):
+        return None
+    lit = start
+    if lit > 0 and text[lit - 1] in "\"'":
+        lit -= 1
+    line_start = text.rfind("\n", 0, lit) + 1
+    line_end = text.find("\n", lit)
+    if line_end < 0:
+        line_end = len(text)
+    return text[line_start:line_end].strip(), text[line_start:lit]
+
+
 def _entry_line(
     item: dict,
     trans_file: Path,
     trans_root: Path,
     source_root: Path,
-    cache: Dict[Path, List[str]],
-) -> str:
-    """取「含该词条原文的那一行」源码；取不到返回空串。
+    cache: Dict[Path, Optional[str]],
+    line_cache: Dict[Path, List[str]],
+) -> Tuple[str, str]:
+    """取「含该词条原文的那一行」源码与「字面量左侧文本」；取不到返回空串。
 
-    `.gd` 词条的 `key` 是解析位置而非行号，只能从 `context` 里找；
-    `.tscn` 词条的 `context` 只有节点头，得用 `key` 的起始行号回读源码。
+        取法优先级：
+        1. `.gd` 词条的 `context` 里直接带语句（`Function Name: xxx` 之后）；
+        2. `context` 为空或语句被截断时，用 `key` 的字符偏移回读源码；
+        3. `.tscn` 词条的 `context` 只有节点头，用 `key` 的起始行号回读源码。
     """
     original = item.get("original", "")
     context = item.get("context") or ""
@@ -312,27 +397,30 @@ def _entry_line(
     if not context.startswith("[node"):
         for line in context.split("\n"):
             if header and header in line:
-                return line.strip()
-        return ""
+                idx = _find_literal_index(line, original)
+                left = line[:idx] if idx >= 0 else line
+                return line.strip(), left
+        span = _line_at_span(item, trans_file, trans_root, source_root, cache)
+        return span if span is not None else ("", "")
 
     source = _resolve_source_path(trans_file, trans_root, source_root)
     if source is None:
-        return ""
-    lines = cache.get(source)
+        return "", ""
+    lines = line_cache.get(source)
     if lines is None:
-        try:
-            lines = source.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError:
-            lines = []
-        cache[source] = lines
+        text = _source_text(source, cache)
+        lines = text.splitlines() if text else []
+        line_cache[source] = lines
     match = re.match(r"\((\d+)", item.get("key", ""))
     if not match or not lines:
-        return ""
+        return "", ""
     start = int(match.group(1))
     for line in lines[max(0, start - 2) : start + 4]:
         if header and header in line:
-            return line.strip()
-    return ""
+            idx = _find_literal_index(line, original)
+            left = line[:idx] if idx >= 0 else line
+            return line.strip(), left
+    return "", ""
 
 
 def _func_name(item: dict) -> str:
@@ -343,7 +431,8 @@ def _func_name(item: dict) -> str:
 
 def _collect(trans_path: Path, source_path: Path) -> Tuple[List[dict], Dict[str, int]]:
     """扫描词条，返回命中列表与统计。"""
-    cache: Dict[Path, List[str]] = {}
+    text_cache: Dict[Path, Optional[str]] = {}
+    line_cache: Dict[Path, List[str]] = {}
     rows: List[dict] = []
     stats = {
         "identifier": 0,
@@ -353,6 +442,7 @@ def _collect(trans_path: Path, source_path: Path) -> Tuple[List[dict], Dict[str,
         "safe": 0,
         "unknown": 0,
         "whitespace": 0,
+        "no_source": 0,
     }
 
     for file in sorted(trans_path.glob("**/*.json")):
@@ -383,11 +473,14 @@ def _collect(trans_path: Path, source_path: Path) -> Tuple[List[dict], Dict[str,
                 continue
 
             func_name = _func_name(item)
-            line = _entry_line(item, file, trans_path, source_path, cache)
+            line, raw_left = _entry_line(
+                item, file, trans_path, source_path, text_cache, line_cache
+            )
             if line:
-                bucket, sink = classify_sink(line, original, func_name)
+                bucket, sink = _classify_left(raw_left, original, func_name)
             else:
                 bucket, sink = UNKNOWN, "no-source"
+                stats["no_source"] += 1
             stats[bucket] += 1
             # 文本落点不告警；形状不像标识符、sink 又没识别的也不进报告
             if bucket == SAFE:
@@ -472,7 +565,7 @@ def check_identifier(
         f"{len(sections['pending_whitespace'])} whitespace, "
         f"{len(sections['unknown'])} unknown "
         f"(judged {stats['danger'] + stats['safe'] + stats['unknown']}, "
-        f"safe {stats['safe']})"
+        f"safe {stats['safe']}, no-source {stats['no_source']})"
     )
     if not any(sections.values()):
         logger.info("no suspicious entry found")
@@ -505,6 +598,7 @@ def check_identifier(
         f"待确认(danger, stage≠1): {len(sections['pending_stage'])}",
         f"空白污染: {len(sections['pending_whitespace'])}",
         f"待人工(unknown): {len(sections['unknown'])}",
+        f"取不到源码行(no-source): {stats['no_source']}",
         "",
     ]
     for name in ("danger", "pending_stage", "pending_whitespace", "unknown"):
